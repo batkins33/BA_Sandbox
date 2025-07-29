@@ -71,18 +71,20 @@ print(f"OCR output written to {OCR_TEXT_PATH}")
 
 # --- REGEX DATA EXTRACTION ---
 print("Parsing OCR output...")
+# Using DOTALL makes '.' match newlines so the pattern runs faster on the
+# multi-line OCR text without relying on heavy '[\s\S]*?' constructs.
 pattern = re.compile(
-    r"Vehicle#:\s*(?P<vehicle>[\w\-]+)[\s\S]*?"
-    r"(\bSoil\s*-\s*Class\s*2\s*Non-Industrial[\s\S]*?)?"
-    r"Profile\s*#\s*(?P<profile>[A-Za-z0-9]+)[\s\S]*?"
-    r"Generator\s*(?P<generator>[^\n]+)[\s\S]*?"
-    r"Manifest#:\s*(?P<manifest>[0-9A-Za-z]+)[\s\S]*?"
+    r"Vehicle#:\s*(?P<vehicle>[\w\-]+).*?"
+    r"(?:\bSoil\s*-\s*Class\s*2\s*Non-Industrial.*?)?"
+    r"Profile\s*#\s*(?P<profile>[A-Za-z0-9]+).*?"
+    r"Generator\s*(?P<generator>[^\n]+).*?"
+    r"Manifest#:\s*(?P<manifest>[0-9A-Za-z]+).*?"
     r"(?P<date>\d{2}/\d{2}/\d{2})\s*"
     r"(?P<ticket>\d{7})\s*"
     r"(?P<qty>\d+\.\d{2})\s*TON\s*"
-    r"(?P<rate>\d+\.\d{2})[\s\S]*?"
+    r"(?P<rate>\d+\.\d{2}).*?"
     r"Ticket Total\s*(?P<ticket_total>\d+\.\d{2})",
-    re.IGNORECASE | re.MULTILINE
+    re.IGNORECASE | re.DOTALL
 )
 
 records = []
