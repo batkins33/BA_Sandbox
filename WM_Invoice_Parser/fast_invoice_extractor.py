@@ -75,22 +75,23 @@ def process_pdf(path: Path, model, page_workers: int = 4):
             texts[idx] = text
             logging.info("OCR completed for page %d of %s", idx + 1, path)
 
-    full_text = "\n".join(texts)
     records = []
-    for match in REGEX_PATTERN.finditer(full_text):
-        groups = match.groupdict()
-        records.append({
-            "File": path.name,
-            "Vehicle": groups.get("vehicle", ""),
-            "Date": groups.get("date", ""),
-            "Ticket#": groups.get("ticket", ""),
-            "Qty": groups.get("qty", ""),
-            "Rate": groups.get("rate", ""),
-            "Profile#": groups.get("profile", ""),
-            "Generator": groups.get("generator", "").strip(),
-            "Manifest#": groups.get("manifest", ""),
-            "TicketTotal": groups.get("ticket_total", ""),
-        })
+    for page_num, page_text in enumerate(texts, start=1):
+        for match in REGEX_PATTERN.finditer(page_text):
+            groups = match.groupdict()
+            records.append({
+                "File": path.name,
+                "Page": page_num,
+                "Vehicle": groups.get("vehicle", ""),
+                "Date": groups.get("date", ""),
+                "Ticket#": groups.get("ticket", ""),
+                "Qty": groups.get("qty", ""),
+                "Rate": groups.get("rate", ""),
+                "Profile#": groups.get("profile", ""),
+                "Generator": groups.get("generator", "").strip(),
+                "Manifest#": groups.get("manifest", ""),
+                "TicketTotal": groups.get("ticket_total", ""),
+            })
     return records
 
 
