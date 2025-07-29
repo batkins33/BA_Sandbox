@@ -1,12 +1,19 @@
 
 import argparse
 from pathlib import Path
+import logging
 import fitz  # PyMuPDF
 import numpy as np
 import pandas as pd
 import re
 from doctr.models import ocr_predictor
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Configure simple logging to show progress information
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
 
 # --- USER SETTINGS ---
@@ -49,14 +56,16 @@ def ocr_page(model, idx, img):
 
 
 def process_pdf(path: Path, model, page_workers: int = 4):
+    logging.info("Processing %s", path)
     doc = fitz.open(str(path))
     pages = []
-    for page in doc:
+    for page_idx, page in enumerate(doc):
         pix = page.get_pixmap(dpi=250, colorspace=fitz.csRGB)
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
         if pix.n == 4:
             img = img[..., :3]
         pages.append(img)
+    logging.info("%d page(s) loaded from %s", len(pages), path)
 
     texts = [None] * len(pages)
     with ThreadPoolExecutor(max_workers=page_workers) as executor:
@@ -64,6 +73,7 @@ def process_pdf(path: Path, model, page_workers: int = 4):
         for fut in as_completed(futures):
             idx, text = fut.result()
             texts[idx] = text
+            logging.info("OCR completed for page %d of %s", idx + 1, path)
 
     full_text = "\n".join(texts)
     records = []
@@ -106,6 +116,7 @@ def main():
     df.to_excel(args.output, index=False)
 
 def main():
+    logging.info("Loading OCR model...")
     model = ocr_predictor(det_arch="db_resnet50", reco_arch="crnn_vgg16_bn", pretrained=True)
 
     all_records = []
@@ -116,12 +127,12 @@ def main():
         for pdf in pdfs:
             all_records.extend(process_pdf(pdf, model, PAGE_WORKERS))
     else:
-        print("ERROR: INPUT_PATH not found.")
+        logging.error("INPUT_PATH not found: %s", INPUT_PATH)
         return
 
     df = pd.DataFrame(all_records)
     df.to_excel(OUTPUT_PATH, index=False)
-    print(f"Extraction complete. Results saved to {OUTPUT_PATH}")
+    logging.info("Extraction complete. Results saved to %s", OUTPUT_PATH)
 
 if __name__ == "__main__":
     main()
