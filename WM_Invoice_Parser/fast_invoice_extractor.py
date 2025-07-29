@@ -1,3 +1,4 @@
+
 import argparse
 from pathlib import Path
 import fitz  # PyMuPDF
@@ -8,6 +9,12 @@ from doctr.models import ocr_predictor
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
+# --- USER SETTINGS ---
+INPUT_PATH = Path(r"C:\Users\brian.atkins\OneDrive - Lindamood Demolition\24-105 PHMS NPC - Documents\PM\Invoices\invoices\A_P_Invoice_0060771-0399-9_10162024.pdf")
+OUTPUT_PATH = Path(r"C:\Users\brian.atkins\OneDrive - Lindamood Demolition\24-105 PHMS NPC - Documents\PM\Invoices\invoices\output.xlsx")
+PAGE_WORKERS = 16                               # Number of threads per PDF for OCR
+
+# --- REGEX PATTERN ---
 REGEX_PATTERN = re.compile(
     r"Vehicle[#:\s]*\s*(?P<vehicle>\S+).*?"
     r"Profile\s*#\s*(?P<profile>\S+).*?"
@@ -34,7 +41,6 @@ def extract_lines(export: dict) -> str:
                 if line_text:
                     lines.append(line_text)
     return "\n".join(lines)
-
 
 def ocr_page(model, idx, img):
     result = model([img])
@@ -99,6 +105,23 @@ def main():
     df = pd.DataFrame(all_records)
     df.to_excel(args.output, index=False)
 
+def main():
+    model = ocr_predictor(det_arch="db_resnet50", reco_arch="crnn_vgg16_bn", pretrained=True)
+
+    all_records = []
+    if INPUT_PATH.is_file():
+        all_records.extend(process_pdf(INPUT_PATH, model, PAGE_WORKERS))
+    elif INPUT_PATH.is_dir():
+        pdfs = sorted(p for p in INPUT_PATH.glob("*.pdf") if p.is_file())
+        for pdf in pdfs:
+            all_records.extend(process_pdf(pdf, model, PAGE_WORKERS))
+    else:
+        print("ERROR: INPUT_PATH not found.")
+        return
+
+    df = pd.DataFrame(all_records)
+    df.to_excel(OUTPUT_PATH, index=False)
+    print(f"Extraction complete. Results saved to {OUTPUT_PATH}")
 
 if __name__ == "__main__":
     main()
