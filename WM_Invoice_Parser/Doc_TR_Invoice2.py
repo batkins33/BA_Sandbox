@@ -63,19 +63,20 @@ with open(OCR_TEXT_PATH, "w", encoding="utf-8") as f:
 print(f"OCR output written to {OCR_TEXT_PATH}")
 
 # --- REGEX DATA EXTRACTION ---
-print("Parsing OCR output...")
 pattern = re.compile(
-    r"Vehicle[#\s:]*\s*(?P<vehicle>.*?)\s+(\d{2}/\d{2}/\d{2})\s*\|?\s*(?P<ticket>\d+)?\s*[\r\n]+"
-    r"Soil\s*-\s*Class\s*2\s*Non-Industrial\s*(?P<qty>[0-9.]+)\s*TON\s*(?P<rate>[0-9.]+)\s*(?P<amount>[0-9.]+)\s*[\r\n]+"
-    r"Profile\s*#\s*(?P<profile>[^\s\r\n]+)\s*[\r\n]+"
-    r"Generator\s*(?P<generator>.+?)\s*[\r\n]+"
-    r"Manifest[#:\s]*\s*(?P<manifest>[0-9A-Za-z]+)\s*[\r\n]+"
-    r"Ticket Total\s*(?P<ticket_total>[0-9.]+)",
-    re.IGNORECASE
+    r"Vehicle[#:\s]*\s*(?P<vehicle>\S+).*?"
+    r"Profile\s*#\s*(?P<profile>\S+).*?"
+    r"Generator\s*(?P<generator>.*?)\s*Manifest[#:\s]*"
+    r"(?P<manifest>\S+).*?"
+    r"Date[:\s]*(?P<date>\d{2}/\d{2}/\d{2}).*?"
+    r"ticket\s*(?:number)?\s*[:#]?\s*(?P<ticket>\d+).*?"
+    r"Qty[:\s]*(?P<qty>[0-9.]+).*?"
+    r"UoM[:\s]*(?P<uom>\w+).*?"
+    r"Rate[:\s]*(?P<rate>[0-9.]+).*?"
+    r"Ticket\s+Total[:\s]*(?P<ticket_total>[0-9.]+)",
+    re.IGNORECASE | re.DOTALL
 )
 
-    re.MULTILINE
-)
 
 records = []
 for match in pattern.finditer(full_text):
