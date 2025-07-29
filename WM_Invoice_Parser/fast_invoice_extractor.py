@@ -131,7 +131,14 @@ def main():
         return
 
     df = pd.DataFrame(all_records)
-    df.to_excel(OUTPUT_PATH, index=False)
+    try:
+        df.to_excel(OUTPUT_PATH, index=False)
+    except ImportError as exc:
+        logging.error("Failed to write Excel file: %s", exc)
+        logging.error(
+            "Ensure the 'openpyxl' package is installed to enable Excel export"
+        )
+        return
     logging.info("Extraction complete. Results saved to %s", OUTPUT_PATH)
 
 if __name__ == "__main__":
