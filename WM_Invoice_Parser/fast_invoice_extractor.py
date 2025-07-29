@@ -1,3 +1,5 @@
+
+import argparse
 from pathlib import Path
 import logging
 import fitz  # PyMuPDF
@@ -12,6 +14,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
+
 
 # --- USER SETTINGS ---
 INPUT_PATH = Path(r"C:\Users\brian.atkins\OneDrive - Lindamood Demolition\24-105 PHMS NPC - Documents\PM\Invoices\invoices\A_P_Invoice_0060771-0399-9_10162024.pdf")
@@ -33,7 +36,9 @@ REGEX_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+
 def extract_lines(export: dict) -> str:
+    """Flatten DocTR export into newline-separated text."""
     lines = []
     if isinstance(export, dict) and "blocks" in export:
         for block in export["blocks"]:
@@ -48,6 +53,7 @@ def ocr_page(model, idx, img):
     result = model([img])
     page = result.pages[0]
     return idx, extract_lines(page.export())
+
 
 def process_pdf(path: Path, model, page_workers: int = 4):
     logging.info("Processing %s", path)
@@ -86,6 +92,28 @@ def process_pdf(path: Path, model, page_workers: int = 4):
             "TicketTotal": groups.get("ticket_total", ""),
         })
     return records
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Extract invoice loads using DocTR OCR")
+    parser.add_argument("input", help="PDF file or directory of PDF files")
+    parser.add_argument("output", help="Path to output Excel file")
+    parser.add_argument("--page-workers", type=int, default=4, help="Threads per PDF for OCR")
+    args = parser.parse_args()
+
+    input_path = Path(args.input)
+    model = ocr_predictor(det_arch="db_resnet50", reco_arch="crnn_vgg16_bn", pretrained=True)
+
+    all_records = []
+    if input_path.is_file():
+        all_records.extend(process_pdf(input_path, model, args.page_workers))
+    else:
+        pdfs = sorted(p for p in input_path.glob("*.pdf") if p.is_file())
+        for pdf in pdfs:
+            all_records.extend(process_pdf(pdf, model, args.page_workers))
+
+    df = pd.DataFrame(all_records)
+    df.to_excel(args.output, index=False)
 
 def main():
     logging.info("Loading OCR model...")
