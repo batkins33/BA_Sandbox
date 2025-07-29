@@ -1,0 +1,11 @@
+/WM_Invoice_Parser/venv/
+/WM_Invoice_Parser/ocr_output.txt
+/WM_Invoice_Parser/ocr_chceker.py
+/WM_Invoice_Parser/txtfinder
+/WM_Invoice_Parser/filefinder.py
+/WM_Invoice_Parser/wm_invoice_loads7.xlsx
+/WM_Invoice_Parser/chk_file.py
+/WM_Invoice_Parser/WM_Invoice_Batch.py
+/WM_Invoice_Parser/WM_Invoice_Parser.py
+/WM_Invoice_Parser/Doc_TR_Invoice3.py
+/WM_Invoice_Parser/Doc_TR_Invoice_Parse.py
