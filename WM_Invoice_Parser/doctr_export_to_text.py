@@ -74,16 +74,16 @@ print("Parsing OCR output...")
 # Using DOTALL makes '.' match newlines so the pattern runs faster on the
 # multi-line OCR text without relying on heavy '[\s\S]*?' constructs.
 pattern = re.compile(
-    r"Vehicle#:\s*(?P<vehicle>[\w\-]+).*?"
-    r"(?:\bSoil\s*-\s*Class\s*2\s*Non-Industrial.*?)?"
-    r"Profile\s*#\s*(?P<profile>[A-Za-z0-9]+).*?"
-    r"Generator\s*(?P<generator>[^\n]+).*?"
-    r"Manifest#:\s*(?P<manifest>[0-9A-Za-z]+).*?"
-    r"(?P<date>\d{2}/\d{2}/\d{2})\s*"
-    r"(?P<ticket>\d{7})\s*"
-    r"(?P<qty>\d+\.\d{2})\s*TON\s*"
-    r"(?P<rate>\d+\.\d{2}).*?"
-    r"Ticket Total\s*(?P<ticket_total>\d+\.\d{2})",
+    r"Vehicle[#:\s]*\s*(?P<vehicle>\S+).*?"
+    r"Profile\s*#\s*(?P<profile>\S+).*?"
+    r"Generator\s*(?P<generator>.*?)\s*Manifest[#:\s]*"
+    r"(?P<manifest>\S+).*?"
+    r"Date[:\s]*(?P<date>\d{2}/\d{2}/\d{2}).*?"
+    r"ticket\s*(?:number)?\s*[:#]?\s*(?P<ticket>\d+).*?"
+    r"Qty[:\s]*(?P<qty>[0-9.]+).*?"
+    r"UoM[:\s]*(?P<uom>\w+).*?"
+    r"Rate[:\s]*(?P<rate>[0-9.]+).*?"
+    r"Ticket\s+Total[:\s]*(?P<ticket_total>[0-9.]+)",
     re.IGNORECASE | re.DOTALL
 )
 
