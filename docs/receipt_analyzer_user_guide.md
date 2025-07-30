@@ -31,4 +31,5 @@ Stop the watcher with `Ctrl+C`.
 ## Customization
 - Modify `CATEGORY_MAP` in `receipt_processing/utils.py` to change how vendor keywords map to categories.
 - Update the `INPUT_DIR`, `OUTPUT_DIR` and `LOG_FILE` constants in `receipt_processing/main.py` to point to other locations.
+- Use `process_receipt_pages` if you need to extract fields from each page of a multi-page PDF.
 

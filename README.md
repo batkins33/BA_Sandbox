@@ -11,5 +11,6 @@ The `WM_Invoice_Parser` directory holds earlier invoice extraction tests and is 
   ```bash
   PYTHONPATH=analyzer_projects/Lindamood_Ticket_Analyzer_v1 pytest
   ```
+- Multi-page PDFs can be parsed page-by-page using the new `process_receipt_pages` helper.
 - Further information is available in `docs/receipt_analyzer_user_guide.md` and `docs/receipt_analyzer_technical_details.md`.
 
