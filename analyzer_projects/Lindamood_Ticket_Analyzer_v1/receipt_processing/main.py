@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 import pandas as pd
 
@@ -65,6 +69,37 @@ def process_receipt(filepath: Path) -> ReceiptFields:
     return fields
 
 
+class ReceiptFileHandler(FileSystemEventHandler):
+    """Handle new files dropped into the input directory."""
+
+    def on_created(self, event):
+        """Process new receipt files as they appear."""
+        if event.is_directory:
+            return
+
+        filepath = Path(event.src_path)
+        if filepath.suffix.lower() not in {".jpg", ".jpeg", ".png", ".pdf"}:
+            return
+
+        try:
+            fields = process_receipt(filepath)
+            record = {
+                "filename": filepath.name,
+                "vendor": fields.vendor,
+                "date": fields.date,
+                "total": fields.total,
+                "category": fields.category,
+                "processed_time": datetime.now().isoformat(),
+            }
+            df = pd.DataFrame([record])
+            if LOG_FILE.exists():
+                existing = pd.read_excel(LOG_FILE)
+                df = pd.concat([existing, df], ignore_index=True)
+            df.to_excel(LOG_FILE, index=False)
+        except Exception as e:  # pragma: no cover - runtime protection
+            print(f"Error processing {filepath.name}: {e}")
+
+
 def run_batch() -> None:
     INPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -95,4 +130,19 @@ def run_batch() -> None:
 
 
 if __name__ == "__main__":  # pragma: no cover - script entry
+    # Optional initial batch in case files already exist when starting
     run_batch()
+
+    event_handler = ReceiptFileHandler()
+    observer = Observer()
+    observer.schedule(event_handler, str(INPUT_DIR), recursive=False)
+    observer.start()
+    print("Watching for new receipt files...")
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+
+    observer.join()
