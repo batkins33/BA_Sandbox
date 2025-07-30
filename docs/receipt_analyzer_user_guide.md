@@ -1,0 +1,34 @@
+# Receipt Analyzer User Guide
+
+The Lindamood Ticket Analyzer processes receipt images or PDFs using optical character recognition (OCR). It extracts key fields and organizes the receipts into categorized folders while logging their details to an Excel file.
+
+## Requirements
+- Python 3.9+
+- Packages: `doctr`, `watchdog`, `pandas`, `openpyxl`
+
+## Setup
+1. Clone this repository.
+2. Install dependencies:
+   ```bash
+   pip install doctr watchdog pandas openpyxl
+   ```
+3. Ensure the paths defined in `receipt_processing/main.py` exist on your system:
+   - `INPUT_DIR` – folder for new receipts (default `C:/Receipts/input`)
+   - `OUTPUT_DIR` – folder for processed receipts (default `C:/Receipts/processed`)
+   - `LOG_FILE` – Excel workbook that stores the processing log.
+
+## Running the App
+Run the module directly:
+```bash
+python -m receipt_processing.main
+```
+The script processes any receipts already in the input directory and then watches for new files. Supported formats are `.jpg`, `.jpeg`, `.png`, and `.pdf`.
+
+When a receipt is processed it will be moved into `OUTPUT_DIR/<category>` and a row will be appended to `LOG_FILE` containing the vendor, date, total and category.
+
+Stop the watcher with `Ctrl+C`.
+
+## Customization
+- Modify `CATEGORY_MAP` in `receipt_processing/utils.py` to change how vendor keywords map to categories.
+- Update the `INPUT_DIR`, `OUTPUT_DIR` and `LOG_FILE` constants in `receipt_processing/main.py` to point to other locations.
+
