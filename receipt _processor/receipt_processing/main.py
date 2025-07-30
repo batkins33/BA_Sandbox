@@ -6,7 +6,7 @@ import shutil
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, List
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -33,8 +33,8 @@ def _get_ocr_model():
 
 
 # --- Utility: OCR processing ---
-def extract_text(filepath: Path) -> Iterable[str]:
-    """Run OCR on an image or PDF and return a list of text lines."""
+def extract_text_pages(filepath: Path) -> List[List[str]]:
+    """Return OCR text for each page of an image or PDF."""
     from doctr.io import DocumentFile
 
     if filepath.suffix.lower() == ".pdf":
@@ -45,12 +45,23 @@ def extract_text(filepath: Path) -> Iterable[str]:
     model = _get_ocr_model()
     result = model(doc)
     export = result.export()
-    lines: list[str] = []
+    pages: List[List[str]] = []
     for page in export["pages"]:
+        lines: List[str] = []
         for block in page.get("blocks", []):
             for line in block.get("lines", []):
                 text = "".join(word["value"] for word in line.get("words", []))
                 lines.append(text)
+        pages.append(lines)
+    return pages
+
+
+def extract_text(filepath: Path) -> Iterable[str]:
+    """Run OCR on an image or PDF and return all text lines."""
+    pages = extract_text_pages(filepath)
+    lines: list[str] = []
+    for page in pages:
+        lines.extend(page)
     return lines
 
 
@@ -67,6 +78,25 @@ def process_receipt(filepath: Path) -> ReceiptFields:
     shutil.move(str(filepath), str(new_path))
 
     return fields
+
+
+def process_receipt_pages(filepath: Path) -> List[ReceiptFields]:
+    """Process a multi-page PDF and return fields for each page."""
+    pages = extract_text_pages(filepath)
+    fields_list: List[ReceiptFields] = []
+    for lines in pages:
+        fields_list.append(extract_fields(lines, CATEGORY_MAP))
+
+    # Move once using the category from the first page
+    if fields_list:
+        category_folder = OUTPUT_DIR / fields_list[0].category
+    else:
+        category_folder = OUTPUT_DIR / "unknown"
+    category_folder.mkdir(parents=True, exist_ok=True)
+    new_path = category_folder / filepath.name
+    shutil.move(str(filepath), str(new_path))
+
+    return fields_list
 
 
 class ReceiptFileHandler(FileSystemEventHandler):
