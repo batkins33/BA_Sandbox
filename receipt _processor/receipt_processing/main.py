@@ -13,23 +13,25 @@ from watchdog.observers import Observer
 
 import pandas as pd
 
-from .utils import CATEGORY_MAP, ReceiptFields, extract_fields
+from utils import CATEGORY_MAP, ReceiptFields, extract_fields
 
 
 # --- Configuration ---
-INPUT_DIR = Path("C:/Receipts/input")
-OUTPUT_DIR = Path("C:/Receipts/processed")
-LOG_FILE = Path("C:/Receipts/receipt_log.xlsx")
+INPUT_DIR = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\input")
+OUTPUT_DIR = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\processed")
+LOG_FILE = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\receipt_log.xlsx")
+
 
 
 # --- Lazy OCR initialization ---
 def _get_ocr_model():
     from doctr.models import ocr_predictor
     return ocr_predictor(
-        det_arch="db_resnet18",
+        det_arch="db_resnet34",  # <-- Use db_resnet34 (commonly available)
         reco_arch="crnn_mobilenet_v3_small",
         pretrained=True,
     )
+
 
 
 # --- Utility: OCR processing ---
