@@ -114,20 +114,25 @@ class ReceiptFileHandler(FileSystemEventHandler):
             return
 
         try:
-            fields = process_receipt(filepath)
-            record = {
-                "filename": filepath.name,
-                "vendor": fields.vendor,
-                "date": fields.date,
-                "total": fields.total,
-                "category": fields.category,
-                "processed_time": datetime.now().isoformat(),
-            }
-            df = pd.DataFrame([record])
-            if LOG_FILE.exists():
-                existing = pd.read_excel(LOG_FILE)
-                df = pd.concat([existing, df], ignore_index=True)
-            df.to_excel(LOG_FILE, index=False)
+            page_fields = process_receipt_pages(filepath)
+            records: list[dict[str, str]] = []
+            for fields in page_fields:
+                record = {
+                    "filename": filepath.name,
+                    "vendor": fields.vendor,
+                    "date": fields.date,
+                    "total": fields.total,
+                    "category": fields.category,
+                    "processed_time": datetime.now().isoformat(),
+                }
+                records.append(record)
+
+            if records:
+                df = pd.DataFrame(records)
+                if LOG_FILE.exists():
+                    existing = pd.read_excel(LOG_FILE)
+                    df = pd.concat([existing, df], ignore_index=True)
+                df.to_excel(LOG_FILE, index=False)
         except Exception as e:  # pragma: no cover - runtime protection
             print(f"Error processing {filepath.name}: {e}")
 
@@ -140,16 +145,17 @@ def run_batch() -> None:
     for file in INPUT_DIR.glob("*"):
         if file.suffix.lower() in {".jpg", ".jpeg", ".png", ".pdf"}:
             try:
-                fields = process_receipt(file)
-                record = {
-                    "filename": file.name,
-                    "vendor": fields.vendor,
-                    "date": fields.date,
-                    "total": fields.total,
-                    "category": fields.category,
-                    "processed_time": datetime.now().isoformat(),
-                }
-                records.append(record)
+                page_fields = process_receipt_pages(file)
+                for fields in page_fields:
+                    record = {
+                        "filename": file.name,
+                        "vendor": fields.vendor,
+                        "date": fields.date,
+                        "total": fields.total,
+                        "category": fields.category,
+                        "processed_time": datetime.now().isoformat(),
+                    }
+                    records.append(record)
             except Exception as e:  # pragma: no cover - runtime protection
                 print(f"Error: {file.name} - {e}")
 
