@@ -29,6 +29,10 @@ INPUT_DIR = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\input")
 OUTPUT_DIR = Path(r"G:\My Drive\receipts\processed")
 LOG_FILE = Path(r"G:\My Drive\receipts\receipt_log.xlsx")
 
+# Enable or disable automatic image cropping prior to OCR.  Set to ``False``
+# if the cropping logic negatively impacts OCR accuracy for your photos.
+AUTO_CROP_ENABLED = True
+
 
 
 # --- Lazy OCR initialization ---
@@ -157,7 +161,7 @@ def rename_receipt_file(filepath: Path, vendor: str, date_str: str) -> Path:
 def process_receipt(filepath: Path) -> ReceiptFields:
     print(f"Processing {filepath.name}...")
 
-    if filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+    if AUTO_CROP_ENABLED and filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
         filepath = auto_crop_image(filepath)
 
     lines = extract_text(filepath)
@@ -176,7 +180,7 @@ def process_receipt(filepath: Path) -> ReceiptFields:
 def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
     """Process a multi-page PDF and return fields for each page."""
 
-    if filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+    if AUTO_CROP_ENABLED and filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
         filepath = auto_crop_image(filepath)
 
     pages = extract_text_pages(filepath)

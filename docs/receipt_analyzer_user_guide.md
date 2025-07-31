@@ -24,7 +24,7 @@ python -m receipt_processing.main
 ```
 The script processes any receipts already in the input directory and then watches for new files. Supported formats are `.jpg`, `.jpeg`, `.png`, and `.pdf`.
 
-When a receipt is processed it will be moved into `OUTPUT_DIR/<category>` and a row will be appended to `LOG_FILE` containing the vendor, date, total and category. Image files are automatically cropped using simple document detection prior to OCR. After text extraction the file is renamed to `YYYYMMDD_VENDOR.ext` when possible (falling back to `receipt_<timestamp>.ext` if parsing fails).
+When a receipt is processed it will be moved into `OUTPUT_DIR/<category>` and a row will be appended to `LOG_FILE` containing the vendor, date, total and category. Image files are automatically cropped using simple document detection prior to OCR. After text extraction the file is renamed to `YYYYMMDD_VENDOR.ext` when possible (falling back to `receipt_<timestamp>.ext` if parsing fails). If cropping yields poor OCR results you can disable it by setting ``AUTO_CROP_ENABLED = False`` in `receipt_processing/main.py`.
 
 Stop the watcher with `Ctrl+C`.
 
