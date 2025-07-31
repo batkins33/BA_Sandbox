@@ -18,8 +18,8 @@ from utils import CATEGORY_MAP, ReceiptFields, extract_fields
 
 # --- Configuration ---
 INPUT_DIR = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\input")
-OUTPUT_DIR = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\processed")
-LOG_FILE = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\receipt_log.xlsx")
+OUTPUT_DIR = Path(r"G:\My Drive\receipts\processed")
+LOG_FILE = Path(r"G:\My Drive\receipts\receipt_log.xlsx")
 
 
 
