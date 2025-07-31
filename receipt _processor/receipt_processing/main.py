@@ -14,7 +14,7 @@ from watchdog.observers import Observer
 
 import pandas as pd
 
-from utils import CATEGORY_MAP, ReceiptFields, extract_fields
+from utils import CATEGORY_MAP, ReceiptFields, extract_fields, load_vendor_categories
 
 try:  # Optional dependency for image processing
     import cv2  # type: ignore
@@ -32,6 +32,12 @@ LOG_FILE = Path(r"G:\My Drive\receipts\receipt_log.xlsx")
 # Enable or disable automatic image cropping prior to OCR.  Set to ``False``
 # if the cropping logic negatively impacts OCR accuracy for your photos.
 AUTO_CROP_ENABLED = True
+AUTO_ORIENT_ENABLED = True
+
+# Optional vendor categorization via CSV mapping
+USE_VENDOR_CSV = True
+VENDOR_CSV_PATH = Path("vendor_categories.csv")
+VENDOR_MAP = load_vendor_categories(VENDOR_CSV_PATH) if USE_VENDOR_CSV and VENDOR_CSV_PATH.exists() else None
 
 
 
@@ -131,6 +137,31 @@ def auto_crop_image(image_path: Path) -> Path:
     return image_path
 
 
+def correct_orientation(image_path: Path) -> Path:
+    """Rotate the image if its width is greater than its height."""
+    if cv2 is None:
+        return image_path
+
+    img = cv2.imread(str(image_path))
+    if img is None:
+        return image_path
+
+    h, w = img.shape[:2]
+    if w > h:
+        rotated = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        cv2.imwrite(str(image_path), rotated)
+    return image_path
+
+
+def preprocess_image(image_path: Path) -> Path:
+    """Apply optional cropping and orientation correction."""
+    if AUTO_CROP_ENABLED:
+        image_path = auto_crop_image(image_path)
+    if AUTO_ORIENT_ENABLED:
+        image_path = correct_orientation(image_path)
+    return image_path
+
+
 def _parse_date(date_str: str) -> str | None:
     """Return YYYYMMDD or None if parsing fails."""
     for fmt in ("%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d"):
@@ -161,11 +192,11 @@ def rename_receipt_file(filepath: Path, vendor: str, date_str: str) -> Path:
 def process_receipt(filepath: Path) -> ReceiptFields:
     print(f"Processing {filepath.name}...")
 
-    if AUTO_CROP_ENABLED and filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-        filepath = auto_crop_image(filepath)
+    if filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+        filepath = preprocess_image(filepath)
 
     lines = extract_text(filepath)
-    fields = extract_fields(lines, CATEGORY_MAP)
+    fields = extract_fields(lines, CATEGORY_MAP, VENDOR_MAP)
 
     filepath = rename_receipt_file(filepath, fields.vendor, fields.date)
 
@@ -180,13 +211,13 @@ def process_receipt(filepath: Path) -> ReceiptFields:
 def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
     """Process a multi-page PDF and return fields for each page."""
 
-    if AUTO_CROP_ENABLED and filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-        filepath = auto_crop_image(filepath)
+    if filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+        filepath = preprocess_image(filepath)
 
     pages = extract_text_pages(filepath)
     fields_list: List[ReceiptFields] = []
     for lines in pages:
-        fields_list.append(extract_fields(lines, CATEGORY_MAP))
+        fields_list.append(extract_fields(lines, CATEGORY_MAP, VENDOR_MAP))
 
     vendor = fields_list[0].vendor if fields_list else "receipt"
     date_val = fields_list[0].date if fields_list else ""
@@ -223,7 +254,11 @@ class ReceiptFileHandler(FileSystemEventHandler):
                     "filename": final_path.name,
                     "vendor": fields.vendor,
                     "date": fields.date,
+                    "subtotal": fields.subtotal,
+                    "tax": fields.tax,
                     "total": fields.total,
+                    "payment_method": fields.payment_method,
+                    "card_last4": fields.card_last4,
                     "category": fields.category,
                     "processed_time": datetime.now().isoformat(),
                 }
@@ -253,7 +288,11 @@ def run_batch() -> None:
                         "filename": final_path.name,
                         "vendor": fields.vendor,
                         "date": fields.date,
+                        "subtotal": fields.subtotal,
+                        "tax": fields.tax,
                         "total": fields.total,
+                        "payment_method": fields.payment_method,
+                        "card_last4": fields.card_last4,
                         "category": fields.category,
                         "processed_time": datetime.now().isoformat(),
                     }
