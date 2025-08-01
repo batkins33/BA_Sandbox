@@ -173,15 +173,20 @@ def _parse_date(date_str: str) -> str | None:
 
 
 def rename_receipt_file(filepath: Path, vendor: str, date_str: str) -> Path:
-    """Rename the file using the vendor and date if available."""
+    """Rename the file as ``Vendor_TransactionDate_ProcessedTimestamp``.
+
+    If the transaction date cannot be parsed, it is omitted. The processed
+    timestamp is always appended using ``YYYYMMDD_HHMMSS`` format.
+    """
+
     date_fmt = _parse_date(date_str)
     safe_vendor = re.sub(r"[^A-Za-z0-9]+", "_", vendor).strip("_") or "receipt"
+    processed_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     if date_fmt:
-        new_name = f"{date_fmt}_{safe_vendor}{filepath.suffix.lower()}"
+        new_name = f"{safe_vendor}_{date_fmt}_{processed_ts}{filepath.suffix.lower()}"
     else:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        new_name = f"receipt_{ts}{filepath.suffix.lower()}"
+        new_name = f"{safe_vendor}_{processed_ts}{filepath.suffix.lower()}"
 
     new_path = filepath.with_name(new_name)
     filepath.rename(new_path)
@@ -251,21 +256,34 @@ class ReceiptFileHandler(FileSystemEventHandler):
             records: list[dict[str, str]] = []
             for fields in page_fields:
                 record = {
-                    "filename": final_path.name,
-                    "vendor": fields.vendor,
                     "date": fields.date,
+                    "vendor": fields.vendor,
                     "subtotal": fields.subtotal,
                     "tax": fields.tax,
                     "total": fields.total,
+                    "category": fields.category,
                     "payment_method": fields.payment_method,
                     "card_last4": fields.card_last4,
-                    "category": fields.category,
+                    "filename": final_path.name,
                     "processed_time": datetime.now().isoformat(),
                 }
                 records.append(record)
 
             if records:
-                df = pd.DataFrame(records)
+                df = pd.DataFrame(records)[
+                    [
+                        "date",
+                        "vendor",
+                        "subtotal",
+                        "tax",
+                        "total",
+                        "category",
+                        "payment_method",
+                        "card_last4",
+                        "filename",
+                        "processed_time",
+                    ]
+                ]
                 if LOG_FILE.exists():
                     existing = pd.read_excel(LOG_FILE)
                     df = pd.concat([existing, df], ignore_index=True)
@@ -285,15 +303,15 @@ def run_batch() -> None:
                 page_fields, final_path = process_receipt_pages(file)
                 for fields in page_fields:
                     record = {
-                        "filename": final_path.name,
-                        "vendor": fields.vendor,
                         "date": fields.date,
+                        "vendor": fields.vendor,
                         "subtotal": fields.subtotal,
                         "tax": fields.tax,
                         "total": fields.total,
+                        "category": fields.category,
                         "payment_method": fields.payment_method,
                         "card_last4": fields.card_last4,
-                        "category": fields.category,
+                        "filename": final_path.name,
                         "processed_time": datetime.now().isoformat(),
                     }
                     records.append(record)
@@ -301,7 +319,20 @@ def run_batch() -> None:
                 print(f"Error: {file.name} - {e}")
 
     if records:
-        df = pd.DataFrame(records)
+        df = pd.DataFrame(records)[
+            [
+                "date",
+                "vendor",
+                "subtotal",
+                "tax",
+                "total",
+                "category",
+                "payment_method",
+                "card_last4",
+                "filename",
+                "processed_time",
+            ]
+        ]
         if LOG_FILE.exists():
             existing = pd.read_excel(LOG_FILE)
             df = pd.concat([existing, df], ignore_index=True)
