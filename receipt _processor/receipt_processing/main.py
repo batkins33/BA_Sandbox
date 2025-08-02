@@ -85,9 +85,55 @@ def extract_text(filepath: Path) -> Iterable[str]:
     return lines
 
 
+def auto_crop_receipt_image(img: "np.ndarray") -> "np.ndarray":
+    """Return a tightly cropped copy of ``img``.
+
+    The previous implementation attempted a perspective transform based on the
+    largest contour which could easily cut off light edges of white receipts.
+    This helper instead computes a bounding box around *all* content using a
+    binary mask and retains a small margin. If the detected region is too small
+    the original image is returned untouched.
+    """
+
+    # Convert to grayscale and threshold to highlight receipt edges
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    bin_img = cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_MEAN_C,
+        cv2.THRESH_BINARY_INV,
+        31,
+        10,
+    )
+
+    # Connect nearby regions so the bounding box covers the whole document
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    morph = cv2.morphologyEx(bin_img, cv2.MORPH_CLOSE, kernel)
+    morph = cv2.dilate(morph, kernel, iterations=1)
+
+    coords = cv2.findNonZero(morph)
+    if coords is None:
+        return img
+
+    x, y, w, h = cv2.boundingRect(coords)
+
+    # Add a small margin around the detected region
+    pad = 10
+    x, y = max(0, x - pad), max(0, y - pad)
+    w = min(img.shape[1] - x, w + 2 * pad)
+    h = min(img.shape[0] - y, h + 2 * pad)
+
+    # Sanity check to avoid over‑cropping.  If the proposed crop is less than
+    # half the width or height of the original image we keep the original.
+    orig_h, orig_w = img.shape[:2]
+    if w < orig_w * 0.5 or h < orig_h * 0.5:
+        return img
+
+    return img[y : y + h, x : x + w]
+
+
 def auto_crop_image(image_path: Path) -> Path:
-    """Attempt to detect the document boundaries and overwrite the image with a
-    cropped version. Returns the path that should be used for OCR."""
+    """Load ``image_path`` and overwrite it with a safely cropped version."""
     if cv2 is None or np is None:
         return image_path
 
@@ -95,58 +141,32 @@ def auto_crop_image(image_path: Path) -> Path:
     if img is None:
         return image_path
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
-    edged = cv2.Canny(gray, 75, 200)
-
-    contours, _ = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
-    screen = None
-    for c in contours:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-        if len(approx) == 4:
-            screen = approx
-            break
-
-    if screen is None:
-        return image_path
-
-    pts = screen.reshape(4, 2).astype("float32")
-    s = pts.sum(axis=1)
-    rect = np.zeros((4, 2), dtype="float32")
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-    diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-
-    (tl, tr, br, bl) = rect
-    widthA = np.linalg.norm(br - bl)
-    widthB = np.linalg.norm(tr - tl)
-    maxW = int(max(widthA, widthB))
-    heightA = np.linalg.norm(tr - br)
-    heightB = np.linalg.norm(tl - bl)
-    maxH = int(max(heightA, heightB))
-
-    dst = np.array([[0, 0], [maxW - 1, 0], [maxW - 1, maxH - 1], [0, maxH - 1]], dtype="float32")
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(img, M, (maxW, maxH))
-
-    cv2.imwrite(str(image_path), warped)
+    cropped = auto_crop_receipt_image(img)
+    cv2.imwrite(str(image_path), cropped)
     return image_path
 
 
 def correct_orientation(image_path: Path) -> Path:
-    """Rotate the image if its width is greater than its height."""
+    """Ensure the image is upright using EXIF metadata and simple heuristics."""
     if cv2 is None:
         return image_path
+
+    # First honour any EXIF orientation data if Pillow is available
+    try:  # pragma: no cover - optional dependency
+        from PIL import Image, ImageOps
+
+        with Image.open(image_path) as pil_img:
+            fixed = ImageOps.exif_transpose(pil_img)
+            fixed.save(image_path)
+    except Exception:
+        pass
 
     img = cv2.imread(str(image_path))
     if img is None:
         return image_path
 
     h, w = img.shape[:2]
+    # If still in landscape orientation, rotate to portrait as a fallback
     if w > h:
         rotated = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
         cv2.imwrite(str(image_path), rotated)
