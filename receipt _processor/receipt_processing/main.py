@@ -271,17 +271,50 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
                 fields.category = pred
         fields_list.append(fields)
 
-    vendor = fields_list[0].vendor if fields_list else "receipt"
-    date_val = fields_list[0].date if fields_list else ""
-    filepath = rename_receipt_file(filepath, vendor, date_val)
-
+    # Determine destination folder based on first page's category
     if fields_list:
         category_folder = OUTPUT_DIR / fields_list[0].category
     else:
         category_folder = OUTPUT_DIR / "unknown"
     category_folder.mkdir(parents=True, exist_ok=True)
-    new_path = category_folder / filepath.name
-    shutil.move(str(filepath), str(new_path))
+
+    # Multi-page PDF handling: save each page as an image and move original
+    is_multi_pdf = filepath.suffix.lower() == ".pdf" and len(pages) > 1
+    if is_multi_pdf:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        new_pdf_name = f"{filepath.stem}_{timestamp}{filepath.suffix.lower()}"
+        new_path = category_folder / new_pdf_name
+        shutil.move(str(filepath), str(new_path))
+
+        images_folder = category_folder / "ReceiptImage"
+        images_folder.mkdir(parents=True, exist_ok=True)
+
+        try:  # Extract pages as images
+            from doctr.io import DocumentFile
+            doc = DocumentFile.from_pdf(str(new_path))
+            page_images = doc.pages
+        except Exception:
+            page_images = []
+
+        for img, fields in zip(page_images, fields_list):
+            safe_vendor = re.sub(r"[^A-Za-z0-9]+", "_", fields.vendor).strip("_") or "receipt"
+            date_fmt = _parse_date(fields.date) or "unknown"
+            total_val = fields.total if fields.total is not None else 0
+            total_str = f"{total_val:.2f}".replace(".", "_")
+            img_name = f"{safe_vendor}_{date_fmt}_{total_str}.jpg"
+            img_path = images_folder / img_name
+            try:
+                from PIL import Image
+
+                Image.fromarray(img).save(img_path)
+            except Exception:
+                pass
+    else:
+        vendor = fields_list[0].vendor if fields_list else "receipt"
+        date_val = fields_list[0].date if fields_list else ""
+        filepath = rename_receipt_file(filepath, vendor, date_val)
+        new_path = category_folder / filepath.name
+        shutil.move(str(filepath), str(new_path))
 
     for f in fields_list:
         receipt_data = asdict(f)
