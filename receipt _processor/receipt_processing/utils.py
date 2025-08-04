@@ -46,6 +46,7 @@ class ReceiptFields:
     card_last4: Optional[str]
     category: str
     lines: list[str]
+    line_items: list[dict[str, float | str]]
 
 
 def _last_amount(line: str) -> Optional[float]:
@@ -99,6 +100,7 @@ def extract_fields(
     total = None
     payment_method = None
     card_last4 = None
+    line_items: list[dict[str, float | str]] = []
 
     for line in lines:
         lower = line.lower()
@@ -131,6 +133,20 @@ def extract_fields(
                         card_last4 = card_match.group(1)
                     break
 
+        # Attempt line-item parsing
+        match = re.match(r"^(.*?)[\s$]*([0-9]+[.,][0-9]{2})\s*$", line)
+        if (
+            match
+            and not re.search(
+                r"sub[-\s]*total|total|tax|amount due|balance due",
+                lower,
+            )
+        ):
+            desc = match.group(1).strip()
+            amount = float(match.group(2).replace(",", ""))
+            if desc:
+                line_items.append({"item": desc, "amount": amount})
+
     # Derive missing monetary fields when possible
     if total is None and subtotal is not None and tax is not None:
         total = round(subtotal + tax, 2)
@@ -159,4 +175,5 @@ def extract_fields(
         card_last4=card_last4,
         category=category,
         lines=list(lines),
+        line_items=line_items,
     )
