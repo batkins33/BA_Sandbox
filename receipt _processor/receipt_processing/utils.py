@@ -82,7 +82,7 @@ def extract_fields(
     for line in lines:
         lower = line.lower()
 
-        if subtotal is None and re.search(r"sub\s*total", lower):
+        if subtotal is None and re.search(r"sub[-\s]*total|net amount", lower):
             m = re.search(r"([0-9]+[.,][0-9]{2})", line.replace(",", ""))
             if m:
                 subtotal = float(m.group(1))

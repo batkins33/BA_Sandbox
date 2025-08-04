@@ -1,3 +1,4 @@
+import pytest
 from receipt_processing.utils import (
     extract_fields,
     ReceiptFields,
@@ -39,5 +40,18 @@ def test_extract_fields_uncategorized():
     assert fields.subtotal is None
     assert fields.tax is None
     assert fields.payment_method is None
+
+
+@pytest.mark.parametrize("line", ["Sub-Total $10.00", "Net Amount $10.00"])
+def test_extract_fields_subtotal_variants(line):
+    lines = [
+        "Store",
+        "Date: 01/01/2024",
+        line,
+        "Tax $0.80",
+        "Total $10.80",
+    ]
+    fields = extract_fields(lines)
+    assert fields.subtotal == 10.00
 
 
