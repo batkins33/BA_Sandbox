@@ -85,3 +85,27 @@ def test_extract_fields_total_variants(line):
     assert fields.total == 10.00
 
 
+def test_compute_total_from_subtotal_and_tax():
+    lines = [
+        "Store",
+        "Subtotal $10.00",
+        "Tax $0.80",
+    ]
+    fields = extract_fields(lines)
+    assert fields.total == 10.80
+    assert fields.subtotal == 10.00
+    assert fields.tax == 0.80
+
+
+def test_compute_subtotal_from_total_and_tax():
+    lines = [
+        "Store",
+        "Tax $0.80",
+        "Total $10.80",
+    ]
+    fields = extract_fields(lines)
+    assert fields.subtotal == 10.00
+    assert fields.total == 10.80
+    assert fields.tax == 0.80
+
+
