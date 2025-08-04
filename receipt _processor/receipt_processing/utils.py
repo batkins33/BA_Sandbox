@@ -113,7 +113,7 @@ def extract_fields(
             if amount is not None:
                 tax = amount
 
-        if total is None and re.search(r"\b(?:total|amount due)\b", lower):
+        if total is None and re.search(r"\b(?:total|grand total|amount due|balance due)\b", lower):
             amount = _last_amount(line)
             if amount is not None:
                 total = amount

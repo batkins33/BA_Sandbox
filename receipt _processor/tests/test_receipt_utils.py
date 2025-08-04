@@ -75,3 +75,13 @@ def test_extract_fields_subtotal_variants(line):
     assert fields.subtotal == 10.00
 
 
+@pytest.mark.parametrize("line", ["Grand Total $10.00", "Balance Due $10.00"])
+def test_extract_fields_total_variants(line):
+    lines = [
+        "Store",
+        line,
+    ]
+    fields = extract_fields(lines)
+    assert fields.total == 10.00
+
+
