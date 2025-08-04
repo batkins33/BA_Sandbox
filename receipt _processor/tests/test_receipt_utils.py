@@ -109,3 +109,17 @@ def test_compute_subtotal_from_total_and_tax():
     assert fields.tax == 0.80
 
 
+def test_line_item_parsing():
+    lines = [
+        "Store",
+        "Burger 4.99",
+        "Fries 2.99",
+        "Total 7.98",
+    ]
+    fields = extract_fields(lines)
+    assert fields.line_items == [
+        {"item": "Burger", "amount": 4.99},
+        {"item": "Fries", "amount": 2.99},
+    ]
+
+

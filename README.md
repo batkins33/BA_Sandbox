@@ -14,3 +14,25 @@ The `WM_Invoice_Parser` directory holds earlier invoice extraction tests and is 
 - Multi-page PDFs can be parsed page-by-page using the new `process_receipt_pages` helper.
 - Further information is available in `docs/receipt_analyzer_user_guide.md` and `docs/receipt_analyzer_technical_details.md`.
 
+## Streamlit Review UI
+Run a small web UI to review and correct logged receipts:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+The app loads `receipt_log.xlsx`, supports inline edits and bulk category
+corrections by vendor, and can upload new receipt files into the intake
+folder.
+
+## ML-Based Categorization
+Train a simple scikit-learn model from the existing log and use it for future
+categorization:
+
+```bash
+python -m receipt_processing.ml_categorizer <path/to/receipt_log.xlsx>
+```
+
+This creates `receipt_category_model.joblib`. The main pipeline will use it
+automatically when present.
+

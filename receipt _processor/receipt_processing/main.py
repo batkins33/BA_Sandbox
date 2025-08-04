@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import time
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, List
@@ -14,6 +16,12 @@ from watchdog.observers import Observer
 
 import pandas as pd
 
+from integrations import (
+    push_to_firefly,
+    push_to_google_sheets,
+    push_to_sharepoint,
+)
+from ml_categorizer import load_model, predict_category
 from utils import CATEGORY_MAP, ReceiptFields, extract_fields, load_vendor_categories
 
 try:  # Optional dependency for image processing
@@ -38,6 +46,7 @@ AUTO_ORIENT_ENABLED = True
 USE_VENDOR_CSV = True
 VENDOR_CSV_PATH = Path("vendor_categories.csv")
 VENDOR_MAP = load_vendor_categories(VENDOR_CSV_PATH) if USE_VENDOR_CSV and VENDOR_CSV_PATH.exists() else None
+ML_MODEL = load_model()
 
 
 
@@ -222,6 +231,12 @@ def process_receipt(filepath: Path) -> ReceiptFields:
 
     lines = extract_text(filepath)
     fields = extract_fields(lines, CATEGORY_MAP, VENDOR_MAP)
+    if ML_MODEL is not None:
+        pred, conf = predict_category(
+            fields.vendor, "\n".join(fields.lines), fields.total, model=ML_MODEL
+        )
+        if pred and conf >= 0.5:
+            fields.category = pred
 
     filepath = rename_receipt_file(filepath, fields.vendor, fields.date)
 
@@ -229,6 +244,11 @@ def process_receipt(filepath: Path) -> ReceiptFields:
     category_folder.mkdir(parents=True, exist_ok=True)
     new_path = category_folder / filepath.name
     shutil.move(str(filepath), str(new_path))
+
+    receipt_data = asdict(fields)
+    push_to_firefly(receipt_data)
+    push_to_google_sheets(receipt_data)
+    push_to_sharepoint(receipt_data)
 
     return fields
 
@@ -242,7 +262,14 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
     pages = extract_text_pages(filepath)
     fields_list: List[ReceiptFields] = []
     for lines in pages:
-        fields_list.append(extract_fields(lines, CATEGORY_MAP, VENDOR_MAP))
+        fields = extract_fields(lines, CATEGORY_MAP, VENDOR_MAP)
+        if ML_MODEL is not None:
+            pred, conf = predict_category(
+                fields.vendor, "\n".join(fields.lines), fields.total, model=ML_MODEL
+            )
+            if pred and conf >= 0.5:
+                fields.category = pred
+        fields_list.append(fields)
 
     vendor = fields_list[0].vendor if fields_list else "receipt"
     date_val = fields_list[0].date if fields_list else ""
@@ -255,6 +282,12 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
     category_folder.mkdir(parents=True, exist_ok=True)
     new_path = category_folder / filepath.name
     shutil.move(str(filepath), str(new_path))
+
+    for f in fields_list:
+        receipt_data = asdict(f)
+        push_to_firefly(receipt_data)
+        push_to_google_sheets(receipt_data)
+        push_to_sharepoint(receipt_data)
 
     return fields_list, new_path
 
@@ -284,6 +317,7 @@ class ReceiptFileHandler(FileSystemEventHandler):
                     "category": fields.category,
                     "payment_method": fields.payment_method,
                     "card_last4": fields.card_last4,
+                    "line_items": json.dumps(fields.line_items) if fields.line_items else "",
                     "filename": final_path.name,
                     "processed_time": datetime.now().isoformat(),
                 }
@@ -300,6 +334,7 @@ class ReceiptFileHandler(FileSystemEventHandler):
                         "category",
                         "payment_method",
                         "card_last4",
+                        "line_items",
                         "filename",
                         "processed_time",
                     ]
@@ -331,6 +366,7 @@ def run_batch() -> None:
                         "category": fields.category,
                         "payment_method": fields.payment_method,
                         "card_last4": fields.card_last4,
+                        "line_items": json.dumps(fields.line_items) if fields.line_items else "",
                         "filename": final_path.name,
                         "processed_time": datetime.now().isoformat(),
                     }
@@ -349,6 +385,7 @@ def run_batch() -> None:
                 "category",
                 "payment_method",
                 "card_last4",
+                "line_items",
                 "filename",
                 "processed_time",
             ]
