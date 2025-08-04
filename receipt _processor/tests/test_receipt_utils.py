@@ -42,6 +42,26 @@ def test_extract_fields_uncategorized():
     assert fields.payment_method is None
 
 
+def test_tax_percentage_ignored():
+    lines = [
+        "Shop",
+        "Sales Tax 8.25% 1.23",
+        "Total 10.00",
+    ]
+    fields = extract_fields(lines)
+    assert fields.tax == 1.23
+
+
+@pytest.mark.parametrize("label", ["GST", "HST", "VAT"])
+def test_tax_label_variants(label):
+    lines = [
+        "Store",
+        f"{label} 2.00",
+    ]
+    fields = extract_fields(lines)
+    assert fields.tax == 2.00
+
+
 @pytest.mark.parametrize("line", ["Sub-Total $10.00", "Net Amount $10.00"])
 def test_extract_fields_subtotal_variants(line):
     lines = [

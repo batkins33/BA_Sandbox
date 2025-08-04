@@ -48,6 +48,27 @@ class ReceiptFields:
     lines: list[str]
 
 
+def _last_amount(line: str) -> Optional[float]:
+    """Return the last monetary amount on ``line`` ignoring percentages.
+
+    Parameters
+    ----------
+    line:
+        The text line to search for amounts.
+
+    Returns
+    -------
+    Optional[float]
+        The last monetary value found or ``None`` if none present.
+    """
+
+    cleaned = line.replace(",", "")
+    matches = list(re.finditer(r"([0-9]+[.,][0-9]{2})(?!\s*%)", cleaned))
+    if matches:
+        return float(matches[-1].group(1))
+    return None
+
+
 def extract_fields(
     lines: Iterable[str],
     category_map: dict[str, list[str]] | None = None,
@@ -83,19 +104,19 @@ def extract_fields(
         lower = line.lower()
 
         if subtotal is None and re.search(r"sub[-\s]*total|net amount", lower):
-            m = re.search(r"([0-9]+[.,][0-9]{2})", line.replace(",", ""))
-            if m:
-                subtotal = float(m.group(1))
+            amount = _last_amount(line)
+            if amount is not None:
+                subtotal = amount
 
-        if tax is None and "tax" in lower:
-            m = re.search(r"([0-9]+[.,][0-9]{2})", line.replace(",", ""))
-            if m:
-                tax = float(m.group(1))
+        if tax is None and re.search(r"(sales\s+)?tax\b|\b(?:gst|hst|vat)\b", lower):
+            amount = _last_amount(line)
+            if amount is not None:
+                tax = amount
 
         if total is None and re.search(r"\b(?:total|amount due)\b", lower):
-            m = re.search(r"([0-9]+[.,][0-9]{2})", line.replace(",", ""))
-            if m:
-                total = float(m.group(1))
+            amount = _last_amount(line)
+            if amount is not None:
+                total = amount
 
         if payment_method is None:
             for method in ["visa", "mastercard", "amex", "discover", "debit", "credit", "cash"]:
