@@ -131,9 +131,10 @@ def extract_fields(
                         card_last4 = card_match.group(1)
                     break
 
+    # Derive missing monetary fields when possible
     if total is None and subtotal is not None and tax is not None:
         total = round(subtotal + tax, 2)
-    if subtotal is None and total is not None and tax is not None:
+    elif subtotal is None and total is not None and tax is not None:
         subtotal = round(total - tax, 2)
 
     date = date_match.group(1) if date_match else ""
