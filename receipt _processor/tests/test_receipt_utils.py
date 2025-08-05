@@ -4,6 +4,7 @@ from receipt_processing.utils import (
     ReceiptFields,
     CATEGORY_MAP,
     load_vendor_categories,
+    assign_item_category,
 )
 
 
@@ -134,4 +135,17 @@ def test_line_item_with_quantity_and_tax():
         {"item_description": "Burger", "price": 4.99, "quantity": 2, "tax": True},
     ]
 
+
+def test_assign_item_category_match():
+    keyword_map = {
+        "food": ["burger", "fries"],
+        "beverage": ["soda", "cola"],
+    }
+    assert assign_item_category("Cheeseburger", keyword_map) == "food"
+    assert assign_item_category("Diet Cola", keyword_map) == "beverage"
+
+
+def test_assign_item_category_uncategorized():
+    keyword_map = {"food": ["burger"]}
+    assert assign_item_category("Laptop Sleeve", keyword_map) == "uncategorized"
 
