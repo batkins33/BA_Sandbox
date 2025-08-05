@@ -47,6 +47,7 @@ class ReceiptFields:
     category: str
     lines: list[str]
     line_items: list[dict[str, float | str]]
+    image_path: Optional[Path] = None
 
 
 def _last_amount(line: str) -> Optional[float]:

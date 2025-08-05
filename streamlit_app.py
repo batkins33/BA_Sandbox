@@ -29,6 +29,7 @@ else:
             "line_items",
             "filename",
             "processed_time",
+            "Receipt_Img",
         ]
     )
 
