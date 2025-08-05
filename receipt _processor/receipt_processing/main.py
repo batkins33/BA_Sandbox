@@ -36,7 +36,35 @@ except Exception:  # pragma: no cover - optional
 INPUT_DIR = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\input")
 OUTPUT_DIR = Path(r"G:\My Drive\receipts\processed")
 LOG_FILE = Path(r"G:\My Drive\receipts\receipt_log.xlsx")
-LINE_ITEMS_FILE = LOG_FILE.with_name("Receipt_Line_Items.xlsx")
+LINE_ITEMS_SHEET = "LineItems"
+
+RECEIPT_COLUMNS = [
+    "receipt_id",
+    "date",
+    "vendor",
+    "subtotal",
+    "tax",
+    "total",
+    "category",
+    "payment_method",
+    "card_last4",
+    "line_items",
+    "filename",
+    "processed_time",
+    "Receipt_Img",
+]
+
+LINE_ITEM_COLUMNS = [
+    "receipt_id",
+    "date",
+    "vendor",
+    "item_description",
+    "item_price",
+    "quantity",
+    "taxable",
+    "category",
+    "image_link",
+]
 
 # Enable or disable automatic image cropping prior to OCR.  Set to ``False``
 # if the cropping logic negatively impacts OCR accuracy for your photos.
@@ -397,6 +425,35 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
     return fields_list, new_path
 
 
+def _append_to_log(
+    receipt_rows: List[dict[str, object]],
+    item_rows: List[dict[str, object]],
+) -> None:
+    """Append new receipt and line-item rows to the Excel log."""
+    if LOG_FILE.exists():
+        with pd.ExcelFile(LOG_FILE) as xls:
+            receipts_df = pd.read_excel(xls, sheet_name=0)
+            if LINE_ITEMS_SHEET in xls.sheet_names:
+                items_df = pd.read_excel(xls, sheet_name=LINE_ITEMS_SHEET)
+            else:
+                items_df = pd.DataFrame(columns=LINE_ITEM_COLUMNS)
+    else:
+        receipts_df = pd.DataFrame(columns=RECEIPT_COLUMNS)
+        items_df = pd.DataFrame(columns=LINE_ITEM_COLUMNS)
+
+    if receipt_rows:
+        new_receipts = pd.DataFrame(receipt_rows)[RECEIPT_COLUMNS]
+        receipts_df = pd.concat([receipts_df, new_receipts], ignore_index=True)
+
+    if item_rows:
+        new_items = pd.DataFrame(item_rows)[LINE_ITEM_COLUMNS]
+        items_df = pd.concat([items_df, new_items], ignore_index=True)
+
+    with pd.ExcelWriter(LOG_FILE, engine="openpyxl", mode="w") as writer:
+        receipts_df.to_excel(writer, index=False, sheet_name="Sheet1")
+        items_df.to_excel(writer, index=False, sheet_name=LINE_ITEMS_SHEET)
+
+
 class ReceiptFileHandler(FileSystemEventHandler):
     """Handle new files dropped into the input directory."""
 
@@ -439,53 +496,16 @@ class ReceiptFileHandler(FileSystemEventHandler):
                             "date": fields.date,
                             "vendor": fields.vendor,
                             "item_description": item.get("item_description"),
-                            "price": item.get("price"),
+                            "item_price": item.get("price"),
                             "quantity": item.get("quantity"),
-                            "tax": item.get("tax", False),
-                            "item_category": item.get("category"),
+                            "taxable": item.get("tax", False),
+                            "category": item.get("category"),
+                            "image_link": _image_hyperlink(fields.image_path),
                         }
                     )
 
-            if records:
-                df = pd.DataFrame(records)[
-                    [
-                        "receipt_id",
-                        "date",
-                        "vendor",
-                        "subtotal",
-                        "tax",
-                        "total",
-                        "category",
-                        "payment_method",
-                        "card_last4",
-                        "line_items",
-                        "filename",
-                        "processed_time",
-                        "Receipt_Img",
-                    ]
-                ]
-                if LOG_FILE.exists():
-                    existing = pd.read_excel(LOG_FILE)
-                    df = pd.concat([existing, df], ignore_index=True)
-                df.to_excel(LOG_FILE, index=False)
-
-            if item_records:
-                item_df = pd.DataFrame(item_records)[
-                    [
-                        "receipt_id",
-                        "date",
-                        "vendor",
-                        "item_description",
-                        "price",
-                        "quantity",
-                        "tax",
-                        "item_category",
-                    ]
-                ]
-                if LINE_ITEMS_FILE.exists():
-                    existing_items = pd.read_excel(LINE_ITEMS_FILE)
-                    item_df = pd.concat([existing_items, item_df], ignore_index=True)
-                item_df.to_excel(LINE_ITEMS_FILE, index=False)
+            if records or item_records:
+                _append_to_log(records, item_records)
         except Exception as e:  # pragma: no cover - runtime protection
             print(f"Error processing {filepath.name}: {e}")
 
@@ -526,55 +546,18 @@ def run_batch() -> None:
                                 "date": fields.date,
                                 "vendor": fields.vendor,
                                 "item_description": item.get("item_description"),
-                                "price": item.get("price"),
+                                "item_price": item.get("price"),
                                 "quantity": item.get("quantity"),
-                                "tax": item.get("tax", False),
-                                "item_category": item.get("category"),
+                                "taxable": item.get("tax", False),
+                                "category": item.get("category"),
+                                "image_link": _image_hyperlink(fields.image_path),
                             }
                         )
             except Exception as e:  # pragma: no cover - runtime protection
                 print(f"Error: {file.name} - {e}")
 
-    if records:
-        df = pd.DataFrame(records)[
-            [
-                "receipt_id",
-                "date",
-                "vendor",
-                "subtotal",
-                "tax",
-                "total",
-                "category",
-                "payment_method",
-                "card_last4",
-                "line_items",
-                "filename",
-                "processed_time",
-                "Receipt_Img",
-            ]
-        ]
-        if LOG_FILE.exists():
-            existing = pd.read_excel(LOG_FILE)
-            df = pd.concat([existing, df], ignore_index=True)
-        df.to_excel(LOG_FILE, index=False)
-
-    if item_records:
-        item_df = pd.DataFrame(item_records)[
-            [
-                "receipt_id",
-                "date",
-                "vendor",
-                "item_description",
-                "price",
-                "quantity",
-                "tax",
-                "item_category",
-            ]
-        ]
-        if LINE_ITEMS_FILE.exists():
-            existing_items = pd.read_excel(LINE_ITEMS_FILE)
-            item_df = pd.concat([existing_items, item_df], ignore_index=True)
-        item_df.to_excel(LINE_ITEMS_FILE, index=False)
+    if records or item_records:
+        _append_to_log(records, item_records)
 
 
 if __name__ == "__main__":  # pragma: no cover - script entry
