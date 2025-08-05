@@ -118,8 +118,20 @@ def test_line_item_parsing():
     ]
     fields = extract_fields(lines)
     assert fields.line_items == [
-        {"item": "Burger", "amount": 4.99},
-        {"item": "Fries", "amount": 2.99},
+        {"item_description": "Burger", "price": 4.99, "quantity": None, "tax": False},
+        {"item_description": "Fries", "price": 2.99, "quantity": None, "tax": False},
+    ]
+
+
+def test_line_item_with_quantity_and_tax():
+    lines = [
+        "Store",
+        "2 Burger 4.99 T",
+        "Total 9.98",
+    ]
+    fields = extract_fields(lines)
+    assert fields.line_items == [
+        {"item_description": "Burger", "price": 4.99, "quantity": 2, "tax": True},
     ]
 
 

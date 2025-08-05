@@ -36,6 +36,7 @@ except Exception:  # pragma: no cover - optional
 INPUT_DIR = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\input")
 OUTPUT_DIR = Path(r"G:\My Drive\receipts\processed")
 LOG_FILE = Path(r"G:\My Drive\receipts\receipt_log.xlsx")
+LINE_ITEMS_FILE = LOG_FILE.with_name("Receipt_Line_Items.xlsx")
 
 # Enable or disable automatic image cropping prior to OCR.  Set to ``False``
 # if the cropping logic negatively impacts OCR accuracy for your photos.
@@ -411,8 +412,11 @@ class ReceiptFileHandler(FileSystemEventHandler):
         try:
             page_fields, final_path = process_receipt_pages(filepath)
             records: list[dict[str, str]] = []
-            for fields in page_fields:
+            item_records: list[dict[str, object]] = []
+            for idx, fields in enumerate(page_fields):
+                receipt_id = final_path.stem if len(page_fields) == 1 else f"{final_path.stem}_{idx+1}"
                 record = {
+                    "receipt_id": receipt_id,
                     "date": fields.date,
                     "vendor": fields.vendor,
                     "subtotal": fields.subtotal,
@@ -428,9 +432,24 @@ class ReceiptFileHandler(FileSystemEventHandler):
                 }
                 records.append(record)
 
+                for item in fields.line_items:
+                    item_records.append(
+                        {
+                            "receipt_id": receipt_id,
+                            "date": fields.date,
+                            "vendor": fields.vendor,
+                            "item_description": item.get("item_description"),
+                            "price": item.get("price"),
+                            "quantity": item.get("quantity"),
+                            "tax": item.get("tax", False),
+                            "category": fields.category,
+                        }
+                    )
+
             if records:
                 df = pd.DataFrame(records)[
                     [
+                        "receipt_id",
                         "date",
                         "vendor",
                         "subtotal",
@@ -449,6 +468,24 @@ class ReceiptFileHandler(FileSystemEventHandler):
                     existing = pd.read_excel(LOG_FILE)
                     df = pd.concat([existing, df], ignore_index=True)
                 df.to_excel(LOG_FILE, index=False)
+
+            if item_records:
+                item_df = pd.DataFrame(item_records)[
+                    [
+                        "receipt_id",
+                        "date",
+                        "vendor",
+                        "item_description",
+                        "price",
+                        "quantity",
+                        "tax",
+                        "category",
+                    ]
+                ]
+                if LINE_ITEMS_FILE.exists():
+                    existing_items = pd.read_excel(LINE_ITEMS_FILE)
+                    item_df = pd.concat([existing_items, item_df], ignore_index=True)
+                item_df.to_excel(LINE_ITEMS_FILE, index=False)
         except Exception as e:  # pragma: no cover - runtime protection
             print(f"Error processing {filepath.name}: {e}")
 
@@ -458,12 +495,15 @@ def run_batch() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     records: list[dict[str, str]] = []
+    item_records: list[dict[str, object]] = []
     for file in INPUT_DIR.glob("*"):
         if file.suffix.lower() in {".jpg", ".jpeg", ".png", ".pdf"}:
             try:
                 page_fields, final_path = process_receipt_pages(file)
-                for fields in page_fields:
+                for idx, fields in enumerate(page_fields):
+                    receipt_id = final_path.stem if len(page_fields) == 1 else f"{final_path.stem}_{idx+1}"
                     record = {
+                        "receipt_id": receipt_id,
                         "date": fields.date,
                         "vendor": fields.vendor,
                         "subtotal": fields.subtotal,
@@ -478,12 +518,27 @@ def run_batch() -> None:
                         "Receipt_Img": _image_hyperlink(fields.image_path),
                     }
                     records.append(record)
+
+                    for item in fields.line_items:
+                        item_records.append(
+                            {
+                                "receipt_id": receipt_id,
+                                "date": fields.date,
+                                "vendor": fields.vendor,
+                                "item_description": item.get("item_description"),
+                                "price": item.get("price"),
+                                "quantity": item.get("quantity"),
+                                "tax": item.get("tax", False),
+                                "category": fields.category,
+                            }
+                        )
             except Exception as e:  # pragma: no cover - runtime protection
                 print(f"Error: {file.name} - {e}")
 
     if records:
         df = pd.DataFrame(records)[
             [
+                "receipt_id",
                 "date",
                 "vendor",
                 "subtotal",
@@ -502,6 +557,24 @@ def run_batch() -> None:
             existing = pd.read_excel(LOG_FILE)
             df = pd.concat([existing, df], ignore_index=True)
         df.to_excel(LOG_FILE, index=False)
+
+    if item_records:
+        item_df = pd.DataFrame(item_records)[
+            [
+                "receipt_id",
+                "date",
+                "vendor",
+                "item_description",
+                "price",
+                "quantity",
+                "tax",
+                "category",
+            ]
+        ]
+        if LINE_ITEMS_FILE.exists():
+            existing_items = pd.read_excel(LINE_ITEMS_FILE)
+            item_df = pd.concat([existing_items, item_df], ignore_index=True)
+        item_df.to_excel(LINE_ITEMS_FILE, index=False)
 
 
 if __name__ == "__main__":  # pragma: no cover - script entry

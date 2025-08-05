@@ -18,6 +18,7 @@ else:
     st.warning("receipt_log.xlsx not found. A new file will be created on save.")
     df = pd.DataFrame(
         columns=[
+            "receipt_id",
             "date",
             "vendor",
             "subtotal",
