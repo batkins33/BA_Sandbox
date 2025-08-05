@@ -201,6 +201,13 @@ def _parse_date(date_str: str) -> str | None:
     return None
 
 
+def _image_hyperlink(path: Path | None) -> str:
+    """Return an Excel hyperlink formula for ``path``."""
+    if path is None:
+        return ""
+    return f'=HYPERLINK("{path}", "Image")'
+
+
 def rename_receipt_file(filepath: Path, vendor: str, date_str: str) -> Path:
     """Rename the file as ``Vendor_TransactionDate_ProcessedTimestamp``.
 
@@ -309,12 +316,15 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
                 Image.fromarray(img).save(img_path)
             except Exception:
                 pass
+            fields.image_path = img_path
     else:
         vendor = fields_list[0].vendor if fields_list else "receipt"
         date_val = fields_list[0].date if fields_list else ""
         filepath = rename_receipt_file(filepath, vendor, date_val)
         new_path = category_folder / filepath.name
         shutil.move(str(filepath), str(new_path))
+        if fields_list:
+            fields_list[0].image_path = new_path
 
     for f in fields_list:
         receipt_data = asdict(f)
@@ -353,6 +363,7 @@ class ReceiptFileHandler(FileSystemEventHandler):
                     "line_items": json.dumps(fields.line_items) if fields.line_items else "",
                     "filename": final_path.name,
                     "processed_time": datetime.now().isoformat(),
+                    "Receipt_Img": _image_hyperlink(fields.image_path),
                 }
                 records.append(record)
 
@@ -370,6 +381,7 @@ class ReceiptFileHandler(FileSystemEventHandler):
                         "line_items",
                         "filename",
                         "processed_time",
+                        "Receipt_Img",
                     ]
                 ]
                 if LOG_FILE.exists():
@@ -402,6 +414,7 @@ def run_batch() -> None:
                         "line_items": json.dumps(fields.line_items) if fields.line_items else "",
                         "filename": final_path.name,
                         "processed_time": datetime.now().isoformat(),
+                        "Receipt_Img": _image_hyperlink(fields.image_path),
                     }
                     records.append(record)
             except Exception as e:  # pragma: no cover - runtime protection
@@ -421,6 +434,7 @@ def run_batch() -> None:
                 "line_items",
                 "filename",
                 "processed_time",
+                "Receipt_Img",
             ]
         ]
         if LOG_FILE.exists():
