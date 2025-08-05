@@ -16,6 +16,45 @@ CATEGORY_MAP: dict[str, list[str]] = {
     "supplies": ["office depot", "staples", "lowes", "home depot"],
 }
 
+# Default item categories mapped to line item keywords
+ITEM_CATEGORY_MAP: dict[str, list[str]] = {
+    "food": ["burger", "fries", "sandwich"],
+    "drink": ["soda", "water", "coffee"],
+}
+
+
+def assign_item_category(
+    description: str, keyword_map: dict[str, list[str]] | None = None
+) -> str:
+    """Return an item category based on keywords in ``description``.
+
+    The mapping is case-insensitive and returns the first category with a
+    matching keyword. If no keywords match, ``"uncategorized"`` is returned.
+
+    Parameters
+    ----------
+    description:
+        The item description to categorize.
+    keyword_map:
+        Optional mapping of categories to keywords. If omitted,
+        :data:`ITEM_CATEGORY_MAP` is used.
+
+    Returns
+    -------
+    str
+        The matched category or ``"uncategorized"`` if no match is found.
+    """
+
+    if keyword_map is None:
+        keyword_map = ITEM_CATEGORY_MAP
+
+    desc = description.lower()
+    for category, keywords in keyword_map.items():
+        for kw in keywords:
+            if kw.lower() in desc:
+                return category
+    return "uncategorized"
+
 
 def load_vendor_categories(csv_path: str | Path) -> dict[str, str]:
     """Load a vendor to category mapping from a CSV file."""
