@@ -442,7 +442,7 @@ class ReceiptFileHandler(FileSystemEventHandler):
                             "price": item.get("price"),
                             "quantity": item.get("quantity"),
                             "tax": item.get("tax", False),
-                            "category": fields.category,
+                            "item_category": item.get("category"),
                         }
                     )
 
@@ -479,7 +479,7 @@ class ReceiptFileHandler(FileSystemEventHandler):
                         "price",
                         "quantity",
                         "tax",
-                        "category",
+                        "item_category",
                     ]
                 ]
                 if LINE_ITEMS_FILE.exists():
@@ -529,7 +529,7 @@ def run_batch() -> None:
                                 "price": item.get("price"),
                                 "quantity": item.get("quantity"),
                                 "tax": item.get("tax", False),
-                                "category": fields.category,
+                                "item_category": item.get("category"),
                             }
                         )
             except Exception as e:  # pragma: no cover - runtime protection
@@ -568,7 +568,7 @@ def run_batch() -> None:
                 "price",
                 "quantity",
                 "tax",
-                "category",
+                "item_category",
             ]
         ]
         if LINE_ITEMS_FILE.exists():

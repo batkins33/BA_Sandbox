@@ -292,6 +292,7 @@ def extract_fields(
                             "price": amount,
                             "quantity": qty,
                             "tax": tax_flag,
+                            "category": assign_item_category(desc),
                         }
                     )
                 if consumed_next:
