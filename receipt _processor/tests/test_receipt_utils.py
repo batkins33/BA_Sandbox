@@ -123,14 +123,14 @@ def test_line_item_parsing():
             "item_description": "Burger",
             "price": 4.99,
             "quantity": None,
-            "tax": False,
+            "taxable": False,
             "category": assign_item_category("Burger"),
         },
         {
             "item_description": "Fries",
             "price": 2.99,
             "quantity": None,
-            "tax": False,
+            "taxable": False,
             "category": assign_item_category("Fries"),
         },
     ]
@@ -148,10 +148,28 @@ def test_line_item_with_quantity_and_tax():
             "item_description": "Burger",
             "price": 4.99,
             "quantity": 2,
-            "tax": True,
+            "taxable": True,
             "category": assign_item_category("Burger"),
         },
     ]
+
+
+def test_infer_taxable_items():
+    lines = [
+        "Store",
+        "Apple 1.00",
+        "Banana 1.00",
+        "Tax 0.08",
+        "Total 2.08",
+    ]
+    fields = extract_fields(lines)
+    taxable_total = sum(
+        item["price"] * (item.get("quantity") or 1)
+        for item in fields.line_items
+        if item["taxable"]
+    )
+    assert taxable_total == pytest.approx(1.00)
+    assert sum(1 for item in fields.line_items if item["taxable"]) == 1
 
 
 def test_assign_item_category_match():

@@ -22,6 +22,10 @@ ITEM_CATEGORY_MAP: dict[str, list[str]] = {
     "drink": ["soda", "water", "coffee"],
 }
 
+# Default local sales tax rate used for inferring taxable items when
+# receipts do not explicitly mark them.
+LOCAL_SALES_TAX_RATE = 0.08
+
 
 def assign_item_category(
     description: str, keyword_map: dict[str, list[str]] | None = None
@@ -272,10 +276,14 @@ def extract_fields(
             if amount is not None:
                 m = re.search(r"([0-9]+[.,][0-9]{2})\s*([A-Za-z]*)$", item_line)
                 desc_part = item_line
-                tax_flag = False
+                flag_chars = ""
                 if m:
                     desc_part = item_line[: m.start()].strip()
-                    tax_flag = bool(m.group(2).strip())
+                    flag_chars = m.group(2).strip().upper()
+
+                taxable_flag: bool | None = None
+                if flag_chars:
+                    taxable_flag = any(ch in {"T", "A"} for ch in flag_chars)
 
                 qty = None
                 qty_match = re.match(r"(\d+)\s+(.*)", desc_part)
@@ -291,7 +299,7 @@ def extract_fields(
                             "item_description": desc,
                             "price": amount,
                             "quantity": qty,
-                            "tax": tax_flag,
+                            "taxable": taxable_flag,
                             "category": assign_item_category(desc),
                         }
                     )
@@ -299,6 +307,44 @@ def extract_fields(
                     i += 1
 
         i += 1
+
+    # Determine taxable items when receipts do not explicitly flag them
+    if line_items:
+        explicit_flags = any(item.get("taxable") is not None for item in line_items)
+        if explicit_flags:
+            for item in line_items:
+                if item.get("taxable") is None:
+                    item["taxable"] = False
+        elif tax is not None:
+            tax_rate = LOCAL_SALES_TAX_RATE
+            line_totals = [
+                round(item["price"] * (item.get("quantity") or 1), 2)
+                for item in line_items
+            ]
+            taxable_target = round(tax / tax_rate, 2)
+            chosen: tuple[int, ...] | None = None
+            from itertools import combinations
+
+            for r in range(1, len(line_items) + 1):
+                for combo in combinations(range(len(line_items)), r):
+                    s = round(sum(line_totals[i] for i in combo), 2)
+                    if abs(s - taxable_target) <= 0.01:
+                        chosen = combo
+                        break
+                if chosen:
+                    break
+
+            if chosen is not None:
+                for idx, item in enumerate(line_items):
+                    item["taxable"] = idx in chosen
+            else:
+                approx_total = round(sum(line_totals) * tax_rate, 2)
+                default_flag = abs(approx_total - tax) <= 0.01
+                for item in line_items:
+                    item["taxable"] = default_flag
+        else:
+            for item in line_items:
+                item["taxable"] = False
 
     # Derive missing monetary fields when possible
     if total is None and subtotal is not None and tax is not None:

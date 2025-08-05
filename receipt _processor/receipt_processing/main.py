@@ -498,7 +498,7 @@ class ReceiptFileHandler(FileSystemEventHandler):
                             "item_description": item.get("item_description"),
                             "item_price": item.get("price"),
                             "quantity": item.get("quantity"),
-                            "taxable": item.get("tax", False),
+                            "taxable": item.get("taxable", False),
                             "category": item.get("category"),
                             "image_link": _image_hyperlink(fields.image_path),
                         }
@@ -548,7 +548,7 @@ def run_batch() -> None:
                                 "item_description": item.get("item_description"),
                                 "item_price": item.get("price"),
                                 "quantity": item.get("quantity"),
-                                "taxable": item.get("tax", False),
+                                "taxable": item.get("taxable", False),
                                 "category": item.get("category"),
                                 "image_link": _image_hyperlink(fields.image_path),
                             }
