@@ -119,8 +119,20 @@ def test_line_item_parsing():
     ]
     fields = extract_fields(lines)
     assert fields.line_items == [
-        {"item_description": "Burger", "price": 4.99, "quantity": None, "tax": False},
-        {"item_description": "Fries", "price": 2.99, "quantity": None, "tax": False},
+        {
+            "item_description": "Burger",
+            "price": 4.99,
+            "quantity": None,
+            "tax": False,
+            "category": assign_item_category("Burger"),
+        },
+        {
+            "item_description": "Fries",
+            "price": 2.99,
+            "quantity": None,
+            "tax": False,
+            "category": assign_item_category("Fries"),
+        },
     ]
 
 
@@ -132,7 +144,13 @@ def test_line_item_with_quantity_and_tax():
     ]
     fields = extract_fields(lines)
     assert fields.line_items == [
-        {"item_description": "Burger", "price": 4.99, "quantity": 2, "tax": True},
+        {
+            "item_description": "Burger",
+            "price": 4.99,
+            "quantity": 2,
+            "tax": True,
+            "category": assign_item_category("Burger"),
+        },
     ]
 
 
