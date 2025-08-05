@@ -45,14 +45,12 @@ def assign_item_category(
         The matched category or ``"uncategorized"`` if no match is found.
     """
 
-    if keyword_map is None:
-        keyword_map = ITEM_CATEGORY_MAP
+    keyword_map = keyword_map or ITEM_CATEGORY_MAP
 
-    desc = description.lower()
+    desc = description.casefold()
     for category, keywords in keyword_map.items():
-        for kw in keywords:
-            if kw.lower() in desc:
-                return category
+        if any(kw.casefold() in desc for kw in keywords):
+            return category
     return "uncategorized"
 
 
