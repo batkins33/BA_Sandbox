@@ -182,12 +182,73 @@ def correct_orientation(image_path: Path) -> Path:
     return image_path
 
 
+def deskew_image(image_path: Path) -> Path:
+    """Detect and correct minor skew in the receipt image."""
+    if cv2 is None or np is None:
+        return image_path
+
+    img = cv2.imread(str(image_path))
+    if img is None:
+        return image_path
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.bitwise_not(gray)
+    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+    coords = cv2.findNonZero(thresh)
+    if coords is None:
+        return image_path
+
+    angle = cv2.minAreaRect(coords)[-1]
+    if angle < -45:
+        angle = -(90 + angle)
+    else:
+        angle = -angle
+
+    if abs(angle) < 0.1:
+        return image_path
+
+    h, w = img.shape[:2]
+    M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
+    rotated = cv2.warpAffine(
+        img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+    )
+    cv2.imwrite(str(image_path), rotated)
+    return image_path
+
+
+def enhance_image_for_ocr(image_path: Path) -> Path:
+    """Denoise, sharpen, and apply adaptive thresholding to boost text contrast."""
+    if cv2 is None or np is None:
+        return image_path
+
+    img = cv2.imread(str(image_path))
+    if img is None:
+        return image_path
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+    sharpened = cv2.filter2D(blurred, -1, sharpen_kernel)
+    thresh = cv2.adaptiveThreshold(
+        sharpened,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        2,
+    )
+    cv2.imwrite(str(image_path), thresh)
+    return image_path
+
+
 def preprocess_image(image_path: Path) -> Path:
-    """Apply optional cropping and orientation correction."""
+    """Apply cropping, orientation, deskewing, and contrast enhancement."""
     if AUTO_CROP_ENABLED:
         image_path = auto_crop_image(image_path)
     if AUTO_ORIENT_ENABLED:
         image_path = correct_orientation(image_path)
+    image_path = deskew_image(image_path)
+    image_path = enhance_image_for_ocr(image_path)
     return image_path
 
 
