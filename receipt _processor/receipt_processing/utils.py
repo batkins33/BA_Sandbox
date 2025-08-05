@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 import pandas as pd
 
@@ -46,7 +46,7 @@ class ReceiptFields:
     card_last4: Optional[str]
     category: str
     lines: list[str]
-    line_items: list[dict[str, float | str]]
+    line_items: list[dict[str, Any]]
     image_path: Optional[Path] = None
 
 
@@ -144,7 +144,7 @@ def extract_fields(
 
     subtotal = tax = total = None
     payment_method = card_last4 = None
-    line_items: list[dict[str, float | str]] = []
+    line_items: list[dict[str, Any]] = []
 
     # Frequently occurring patterns
     subtotal_re = re.compile(r"\bsub[\s-]*total\b|net amount", re.I)
@@ -154,9 +154,6 @@ def extract_fields(
         r"sub[\s-]*total|total|grand total|amount due|balance due|(?:sales\s+)?tax|gst|hst|vat",
         re.I,
     )
-    costco_item_re = re.compile(r"^(?:[A-Z]\s+)?\d+\s+(.+?)\s+([0-9]+[.,][0-9]{2})$")
-    generic_item_re = re.compile(r"^(.*?)[\s$]*([0-9]+[.,][0-9]{2})\s*$")
-
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -220,24 +217,46 @@ def extract_fields(
         # Line-item extraction
         if not summary_re.search(lower):
             item_line = line
-            match = costco_item_re.match(item_line) or generic_item_re.match(item_line)
             consumed_next = False
+            amount = _last_amount(item_line)
             if (
-                not match
+                amount is None
                 and i + 1 < len(lines)
                 and not summary_re.search(lines[i + 1].lower())
-                and re.search(r"\d", line)
+                and re.search(r"\d", lines[i + 1])
+                and (re.search(r"\d", line) or i > 0)
             ):
                 combined = f"{line} {lines[i + 1]}"
-                match = costco_item_re.match(combined) or generic_item_re.match(combined)
-                if match:
+                amount = _last_amount(combined)
+                if amount is not None:
                     item_line = combined
                     consumed_next = True
-            if match:
-                desc = match.group(1).strip()
-                amount = float(match.group(2).replace(",", ""))
+
+            if amount is not None:
+                m = re.search(r"([0-9]+[.,][0-9]{2})\s*([A-Za-z]*)$", item_line)
+                desc_part = item_line
+                tax_flag = False
+                if m:
+                    desc_part = item_line[: m.start()].strip()
+                    tax_flag = bool(m.group(2).strip())
+
+                qty = None
+                qty_match = re.match(r"(\d+)\s+(.*)", desc_part)
+                if qty_match:
+                    qty = int(qty_match.group(1))
+                    desc = qty_match.group(2).strip()
+                else:
+                    desc = desc_part.strip()
+
                 if desc:
-                    line_items.append({"item": desc, "amount": amount})
+                    line_items.append(
+                        {
+                            "item_description": desc,
+                            "price": amount,
+                            "quantity": qty,
+                            "tax": tax_flag,
+                        }
+                    )
                 if consumed_next:
                     i += 1
 
