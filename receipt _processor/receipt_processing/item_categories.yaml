@@ -1,3 +1,4 @@
+# Keyword mapping for item categories including common OCR errors
 food:
   - burger
   - burgcr  # OCR error for "burger"
