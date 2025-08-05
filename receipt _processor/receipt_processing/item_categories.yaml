@@ -1,0 +1,16 @@
+food:
+  - burger
+  - burgcr  # OCR error for "burger"
+  - fries
+  - frics   # OCR error for "fries"
+  - sandwich
+  - sandw1ch  # OCR error for "sandwich"
+drink:
+  - soda
+  - s0da    # OCR error for "soda"
+  - water
+  - waler   # OCR error for "water"
+  - coffee
+  - coffec  # OCR error for "coffee"
+  - cola
+  - co1a    # OCR error for "cola"
