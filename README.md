@@ -2,7 +2,7 @@
 
 This repository contains small experiments with document analysis. The most complete example is the **receipt analyzer** located under `analyzer_projects/Lindamood_Ticket_Analyzer_v1`.
 
-The receipt analyzer monitors a directory for new receipt images or PDFs, extracts information using OCR and simple regular expressions, then organizes the files into category folders while keeping a log in an Excel workbook. Image receipts are cropped before OCR and renamed based on the detected vendor and date. Cropping can be disabled by setting ``AUTO_CROP_ENABLED = False`` in ``receipt_processing/main.py`` if it causes issues with your photos.
+The receipt analyzer monitors a directory for new receipt images or PDFs, extracts information using OCR and simple regular expressions, then organizes the files into category folders while keeping a log in an Excel workbook. Each receipt's line items are exported to a separate **LineItems** sheet in the same workbook. Image receipts are cropped before OCR and renamed based on the detected vendor and date. Cropping can be disabled by setting ``AUTO_CROP_ENABLED = False`` in ``receipt_processing/main.py`` if it causes issues with your photos.
 
 The `WM_Invoice_Parser` directory holds earlier invoice extraction tests and is not integrated with the receipt analyzer.
 
