@@ -1,0 +1,22 @@
+1. Make sure Python 3.10 is installed via Anaconda.
+2. Activate your Conda environment:
+   > conda activate py310
+
+3. Install required packages (once):
+   > pip install -r requirements.txt
+
+4. Place your script files:
+   - combine_manifest.py
+   - requirements.txt
+   - run_combine.bat
+
+5. To run the script:
+   - Double-click run_combine.bat
+   - Or use CLI:
+     > python combine_manifest.py
+
+6. Check the output in the Combined/YYYY-MM/ folder.
+   - PDF file
+   - Excel log file
+
+7. To update source/destination paths, edit the top of combine_manifest.py.

@@ -1,0 +1,37 @@
+
+---
+
+## 📄 **Project Specs**
+
+```text
+Script Name: combine_manifest.py
+
+Purpose:
+- Batch merge PDFs from daily folders.
+- Sort by file creation time.
+- Add PDF bookmarks.
+- Save merged file and log to structured destination.
+
+Technologies:
+- Python 3.10
+- Libraries: pypdf, pandas, openpyxl
+
+Inputs:
+- Source directory: "COPIES FROM WM"
+- Each subdir named as MM.DD.YYYY
+- Any number of PDF files inside each folder
+
+Outputs:
+- Combined PDF in: Combined/YYYY-MM/
+- Log file in Excel (.xlsx), same directory
+
+Bookmarking:
+- Bookmark each original file name
+- First page of each source file in merged PDF
+
+Error Handling:
+- Skips folders with no PDFs
+- Prints error messages if files can't be merged
+
+Execution:
+- CLI or Windows `.bat` file using Conda environment

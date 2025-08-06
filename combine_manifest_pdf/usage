@@ -1,0 +1,38 @@
+
+python combine_manifest.py
+Run Manually: python combine_manifest.py
+
+Run via Command Line
+    Open a command prompt and navigate to the directory where the script is located.
+    Run the script using Python:
+
+    ```bash
+    python combine_manifest.py
+    ```
+Run via Batch (Windows Only)
+    Use the provided batch file: run_combine.bat
+
+\python.exe combine_manifest.py
+    This will execute the script using the Python interpreter from the specified Conda environment.
+
+    Make sure to adjust the path to your Python executable if necessary.
+\envs\py310\python.exe combine_manifest.py
+    This will execute the script using the Python interpreter from the specified Conda environment.
+    Make sure to adjust the path to your Python executable if necessary.
+
+    Example:
+
+    ```bash
+    C:\Users\brian.atkins\AppData\Local\anaconda3\envs\py310\python.exe combine_manifest.py
+    ```
+    This will execute the script using the Python interpreter from the specified Conda environment.
+    Make sure to adjust the path to your Python executable if necessary.
+    Example:
+
+    ```bash
+    C:\Users\brian.atkins\AppData\Local\anaconda3\envs\py310\python.exe combine_manifest.py
+    ```
+
+
+Make sure your Conda environment is correctly set up at:
+    C:\Users\brian.atkins\AppData\Local\anaconda3\envs\py310

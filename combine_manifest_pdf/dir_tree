@@ -1,0 +1,12 @@
+[Source Directory]
+├── 01.15.2025
+│   ├── file1.pdf
+│   ├── file2.pdf
+├── 02.10.2025
+│   └── file3.pdf
+
+[Destination Directory]
+└── Combined
+    └── 2025-01
+        └── 24-105_01.15.2025_manifest_combined_8.pdf
+        └── 24-105_01.15.2025_manifest_combined_8.xlsx
