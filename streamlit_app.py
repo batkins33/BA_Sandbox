@@ -31,6 +31,8 @@ else:
             "filename",
             "processed_time",
             "Receipt_Img",
+            "Total_Img",
+            "CardLast4_Img",
         ]
     )
 
