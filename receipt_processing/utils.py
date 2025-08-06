@@ -10,12 +10,10 @@ from typing import Any, Callable, Iterable, Optional
 import pandas as pd
 import yaml
 
+from .config import CONFIG
+
 # Default categories mapped to vendor keywords
-CATEGORY_MAP: dict[str, list[str]] = {
-    "fuel": ["shell", "chevron", "exxon", "gas"],
-    "meals": ["restaurant", "grill", "mcdonald", "subway", "burger"],
-    "supplies": ["office depot", "staples", "lowes", "home depot"],
-}
+CATEGORY_MAP: dict[str, list[str]] = CONFIG["category_map"]
 
 # Path to the item category keyword mapping
 ITEM_CATEGORY_FILE = Path(__file__).with_name("item_categories.yaml")
@@ -37,7 +35,7 @@ except FileNotFoundError:  # pragma: no cover - configuration optional
 
 # Default local sales tax rate used for inferring taxable items when
 # receipts do not explicitly mark them.
-LOCAL_SALES_TAX_RATE = 0.08
+LOCAL_SALES_TAX_RATE = CONFIG["local_sales_tax_rate"]
 
 
 # ---------------------------------------------------------------------------
