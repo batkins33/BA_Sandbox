@@ -8,6 +8,7 @@ from .utils import (
     load_vendor_categories,
     vendor_csv_to_json,
     register_vendor_template,
+    compute_receipt_signature,
 )
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "load_vendor_categories",
     "vendor_csv_to_json",
     "register_vendor_template",
+    "compute_receipt_signature",
 ]
 

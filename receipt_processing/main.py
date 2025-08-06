@@ -31,6 +31,7 @@ from utils import (
     compute_confidence_score,
     extract_fields,
     load_vendor_categories,
+    compute_receipt_signature,
 )
 
 try:  # Optional dependency for image processing
@@ -61,6 +62,7 @@ RECEIPT_COLUMNS = [
     "line_items",
     "filename",
     "processed_time",
+    "signature",
     "Receipt_Img",
     "Total_Img",
     "CardLast4_Img",
@@ -614,18 +616,40 @@ def _append_to_log(
             receipts_df = pd.DataFrame(columns=RECEIPT_COLUMNS)
             items_df = pd.DataFrame(columns=LINE_ITEM_COLUMNS)
 
+        kept_ids: set[str] = set()
         if receipt_rows:
             if "confidence_score" not in receipts_df.columns:
                 receipts_df["confidence_score"] = None
-            for col in ("Total_Img", "CardLast4_Img"):
+            for col in ("Total_Img", "CardLast4_Img", "signature"):
                 if col not in receipts_df.columns:
                     receipts_df[col] = ""
-            new_receipts = pd.DataFrame(receipt_rows)[RECEIPT_COLUMNS]
-            receipts_df = pd.concat([receipts_df, new_receipts], ignore_index=True)
+            receipts_df["signature"] = receipts_df.apply(
+                lambda r: compute_receipt_signature(
+                    str(r.get("vendor", "")), str(r.get("date", "")), r.get("total")
+                ),
+                axis=1,
+            )
+            existing = set(receipts_df["signature"].dropna().astype(str))
+            filtered: list[dict[str, object]] = []
+            for row in receipt_rows:
+                sig = compute_receipt_signature(
+                    str(row.get("vendor", "")), str(row.get("date", "")), row.get("total")
+                )
+                if sig in existing:
+                    continue
+                row["signature"] = sig
+                existing.add(sig)
+                kept_ids.add(str(row.get("receipt_id")))
+                filtered.append(row)
+            if filtered:
+                new_receipts = pd.DataFrame(filtered)[RECEIPT_COLUMNS]
+                receipts_df = pd.concat([receipts_df, new_receipts], ignore_index=True)
 
-        if item_rows:
-            new_items = pd.DataFrame(item_rows)[LINE_ITEM_COLUMNS]
-            items_df = pd.concat([items_df, new_items], ignore_index=True)
+        if item_rows and kept_ids:
+            item_rows = [r for r in item_rows if str(r.get("receipt_id")) in kept_ids]
+            if item_rows:
+                new_items = pd.DataFrame(item_rows)[LINE_ITEM_COLUMNS]
+                items_df = pd.concat([items_df, new_items], ignore_index=True)
 
         with pd.ExcelWriter(LOG_FILE, engine="openpyxl", mode="w") as writer:
             receipts_df.to_excel(writer, index=False, sheet_name="Sheet1")
@@ -664,6 +688,9 @@ class ReceiptFileHandler(FileSystemEventHandler):
                     "line_items": json.dumps(fields.line_items) if fields.line_items else "",
                     "filename": final_path.name,
                     "processed_time": datetime.now().isoformat(),
+                    "signature": compute_receipt_signature(
+                        fields.vendor, fields.date, fields.total
+                    ),
                     "Receipt_Img": _image_hyperlink(fields.image_path),
                     "Total_Img": _image_hyperlink(
                         fields.field_images.get("Total") if fields.field_images else None
@@ -719,6 +746,9 @@ def run_batch(parallel: bool = True) -> None:
                 "line_items": json.dumps(fields.line_items) if fields.line_items else "",
                 "filename": final_path.name,
                 "processed_time": datetime.now().isoformat(),
+                "signature": compute_receipt_signature(
+                    fields.vendor, fields.date, fields.total
+                ),
                 "Receipt_Img": _image_hyperlink(fields.image_path),
                 "Total_Img": _image_hyperlink(
                     fields.field_images.get("Total") if fields.field_images else None
