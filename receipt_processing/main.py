@@ -6,8 +6,10 @@ import json
 import re
 import shutil
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict
 from datetime import datetime
+from multiprocessing import Lock
 from pathlib import Path
 from typing import Iterable, List
 
@@ -88,6 +90,7 @@ ML_MODEL = load_model()
 
 LOW_CONFIDENCE_THRESHOLD = 0.6
 LOW_CONFIDENCE_LOG = Path("low_confidence_receipts.log")
+LOG_LOCK = Lock()
 
 
 
@@ -439,8 +442,9 @@ def _log_low_confidence(path: Path, score: float, page: int | None = None) -> No
         details = f"{details} [page {page}]"
     message = f"{datetime.now().isoformat()} - {details} score={score:.2f}"
     print(f"[LOW CONFIDENCE] {message}")
-    with open(LOW_CONFIDENCE_LOG, "a", encoding="utf-8") as fh:
-        fh.write(message + "\n")
+    with LOG_LOCK:
+        with open(LOW_CONFIDENCE_LOG, "a", encoding="utf-8") as fh:
+            fh.write(message + "\n")
 
 
 def rename_receipt_file(filepath: Path, vendor: str, date_str: str) -> Path:
@@ -592,33 +596,34 @@ def _append_to_log(
     item_rows: List[dict[str, object]],
 ) -> None:
     """Append new receipt and line-item rows to the Excel log."""
-    if LOG_FILE.exists():
-        with pd.ExcelFile(LOG_FILE) as xls:
-            receipts_df = pd.read_excel(xls, sheet_name=0)
-            if LINE_ITEMS_SHEET in xls.sheet_names:
-                items_df = pd.read_excel(xls, sheet_name=LINE_ITEMS_SHEET)
-            else:
-                items_df = pd.DataFrame(columns=LINE_ITEM_COLUMNS)
-    else:
-        receipts_df = pd.DataFrame(columns=RECEIPT_COLUMNS)
-        items_df = pd.DataFrame(columns=LINE_ITEM_COLUMNS)
+    with LOG_LOCK:
+        if LOG_FILE.exists():
+            with pd.ExcelFile(LOG_FILE) as xls:
+                receipts_df = pd.read_excel(xls, sheet_name=0)
+                if LINE_ITEMS_SHEET in xls.sheet_names:
+                    items_df = pd.read_excel(xls, sheet_name=LINE_ITEMS_SHEET)
+                else:
+                    items_df = pd.DataFrame(columns=LINE_ITEM_COLUMNS)
+        else:
+            receipts_df = pd.DataFrame(columns=RECEIPT_COLUMNS)
+            items_df = pd.DataFrame(columns=LINE_ITEM_COLUMNS)
 
-    if receipt_rows:
-        if "confidence_score" not in receipts_df.columns:
-            receipts_df["confidence_score"] = None
-        for col in ("Total_Img", "CardLast4_Img"):
-            if col not in receipts_df.columns:
-                receipts_df[col] = ""
-        new_receipts = pd.DataFrame(receipt_rows)[RECEIPT_COLUMNS]
-        receipts_df = pd.concat([receipts_df, new_receipts], ignore_index=True)
+        if receipt_rows:
+            if "confidence_score" not in receipts_df.columns:
+                receipts_df["confidence_score"] = None
+            for col in ("Total_Img", "CardLast4_Img"):
+                if col not in receipts_df.columns:
+                    receipts_df[col] = ""
+            new_receipts = pd.DataFrame(receipt_rows)[RECEIPT_COLUMNS]
+            receipts_df = pd.concat([receipts_df, new_receipts], ignore_index=True)
 
-    if item_rows:
-        new_items = pd.DataFrame(item_rows)[LINE_ITEM_COLUMNS]
-        items_df = pd.concat([items_df, new_items], ignore_index=True)
+        if item_rows:
+            new_items = pd.DataFrame(item_rows)[LINE_ITEM_COLUMNS]
+            items_df = pd.concat([items_df, new_items], ignore_index=True)
 
-    with pd.ExcelWriter(LOG_FILE, engine="openpyxl", mode="w") as writer:
-        receipts_df.to_excel(writer, index=False, sheet_name="Sheet1")
-        items_df.to_excel(writer, index=False, sheet_name=LINE_ITEMS_SHEET)
+        with pd.ExcelWriter(LOG_FILE, engine="openpyxl", mode="w") as writer:
+            receipts_df.to_excel(writer, index=False, sheet_name="Sheet1")
+            items_df.to_excel(writer, index=False, sheet_name=LINE_ITEMS_SHEET)
 
 
 class ReceiptFileHandler(FileSystemEventHandler):
@@ -684,56 +689,78 @@ class ReceiptFileHandler(FileSystemEventHandler):
             print(f"Error processing {filepath.name}: {e}")
 
 
-def run_batch() -> None:
+def run_batch(parallel: bool = True) -> None:
     INPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     records: list[dict[str, str]] = []
     item_records: list[dict[str, object]] = []
-    for file in INPUT_DIR.glob("*"):
-        if file.suffix.lower() in {".jpg", ".jpeg", ".png", ".pdf"}:
-            try:
-                page_fields, final_path = process_receipt_pages(file)
-                for idx, fields in enumerate(page_fields):
-                    receipt_id = final_path.stem if len(page_fields) == 1 else f"{final_path.stem}_{idx+1}"
-                    record = {
+
+    def _collect(page_fields: List[ReceiptFields], final_path: Path) -> None:
+        for idx, fields in enumerate(page_fields):
+            receipt_id = final_path.stem if len(page_fields) == 1 else f"{final_path.stem}_{idx+1}"
+            record = {
+                "receipt_id": receipt_id,
+                "date": fields.date,
+                "vendor": fields.vendor,
+                "subtotal": fields.subtotal,
+                "tax": fields.tax,
+                "total": fields.total,
+                "category": fields.category,
+                "payment_method": fields.payment_method,
+                "card_last4": fields.card_last4,
+                "confidence_score": fields.confidence_score,
+                "line_items": json.dumps(fields.line_items) if fields.line_items else "",
+                "filename": final_path.name,
+                "processed_time": datetime.now().isoformat(),
+                "Receipt_Img": _image_hyperlink(fields.image_path),
+                "Total_Img": _image_hyperlink(
+                    fields.field_images.get("Total") if fields.field_images else None
+                ),
+                "CardLast4_Img": _image_hyperlink(
+                    fields.field_images.get("CardLast4") if fields.field_images else None
+                ),
+            }
+            records.append(record)
+
+            for item in fields.line_items:
+                item_records.append(
+                    {
                         "receipt_id": receipt_id,
                         "date": fields.date,
                         "vendor": fields.vendor,
-                        "subtotal": fields.subtotal,
-                        "tax": fields.tax,
-                        "total": fields.total,
-                        "category": fields.category,
-                        "payment_method": fields.payment_method,
-                        "card_last4": fields.card_last4,
-                        "confidence_score": fields.confidence_score,
-                        "line_items": json.dumps(fields.line_items) if fields.line_items else "",
-                        "filename": final_path.name,
-                        "processed_time": datetime.now().isoformat(),
-                        "Receipt_Img": _image_hyperlink(fields.image_path),
-                        "Total_Img": _image_hyperlink(
-                            fields.field_images.get("Total") if fields.field_images else None
-                        ),
-                        "CardLast4_Img": _image_hyperlink(
-                            fields.field_images.get("CardLast4") if fields.field_images else None
-                        ),
+                        "item_description": item.get("item_description"),
+                        "item_price": item.get("price"),
+                        "quantity": item.get("quantity"),
+                        "taxable": item.get("taxable", False),
+                        "category": item.get("category"),
+                        "image_link": _image_hyperlink(fields.image_path),
                     }
-                    records.append(record)
+                )
 
-                    for item in fields.line_items:
-                        item_records.append(
-                            {
-                                "receipt_id": receipt_id,
-                                "date": fields.date,
-                                "vendor": fields.vendor,
-                                "item_description": item.get("item_description"),
-                                "item_price": item.get("price"),
-                                "quantity": item.get("quantity"),
-                                "taxable": item.get("taxable", False),
-                                "category": item.get("category"),
-                                "image_link": _image_hyperlink(fields.image_path),
-                            }
-                        )
+    files = [
+        f
+        for f in INPUT_DIR.glob("*")
+        if f.suffix.lower() in {".jpg", ".jpeg", ".png", ".pdf"}
+    ]
+
+    if parallel and files:
+        with ProcessPoolExecutor() as executor:
+            future_to_file = {
+                executor.submit(process_receipt_pages, f): f for f in files
+            }
+            for future in as_completed(future_to_file):
+                file = future_to_file[future]
+                try:
+                    page_fields, final_path = future.result()
+                    _collect(page_fields, final_path)
+                except Exception as e:  # pragma: no cover - runtime protection
+                    print(f"Error: {file.name} - {e}")
+    else:
+        for file in files:
+            try:
+                page_fields, final_path = process_receipt_pages(file)
+                _collect(page_fields, final_path)
             except Exception as e:  # pragma: no cover - runtime protection
                 print(f"Error: {file.name} - {e}")
 
