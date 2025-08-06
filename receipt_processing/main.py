@@ -59,6 +59,8 @@ RECEIPT_COLUMNS = [
     "filename",
     "processed_time",
     "Receipt_Img",
+    "Total_Img",
+    "CardLast4_Img",
 ]
 
 LINE_ITEM_COLUMNS = [
@@ -101,8 +103,10 @@ def _get_ocr_model():
 
 
 # --- Utility: OCR processing ---
-def extract_text_pages(filepath: Path) -> List[List[str]]:
-    """Return OCR text for each page of an image or PDF."""
+def extract_text_pages(
+    filepath: Path,
+) -> tuple[List[List[str]], List[List[tuple[str, tuple[float, float, float, float]]]]]:
+    """Return OCR text and word boxes for each page of an image or PDF."""
     from doctr.io import DocumentFile
 
     if filepath.suffix.lower() == ".pdf":
@@ -114,19 +118,26 @@ def extract_text_pages(filepath: Path) -> List[List[str]]:
     result = model(doc)
     export = result.export()
     pages: List[List[str]] = []
+    boxes: List[List[tuple[str, tuple[float, float, float, float]]]] = []
     for page in export["pages"]:
         lines: List[str] = []
+        word_boxes: List[tuple[str, tuple[float, float, float, float]]] = []
         for block in page.get("blocks", []):
             for line in block.get("lines", []):
-                text = "".join(word["value"] for word in line.get("words", []))
+                words = line.get("words", [])
+                text = "".join(w["value"] for w in words)
                 lines.append(text)
+                for w in words:
+                    geom = w.get("geometry", [0, 0, 1, 1])
+                    word_boxes.append((w["value"], tuple(geom)))
         pages.append(lines)
-    return pages
+        boxes.append(word_boxes)
+    return pages, boxes
 
 
 def extract_text(filepath: Path) -> Iterable[str]:
     """Run OCR on an image or PDF and return all text lines."""
-    pages = extract_text_pages(filepath)
+    pages, _ = extract_text_pages(filepath)
     lines: list[str] = []
     for page in pages:
         lines.extend(page)
@@ -348,6 +359,79 @@ def _image_hyperlink(path: Path | None) -> str:
     return f'=HYPERLINK("{path}", "Image")'
 
 
+def _save_field_crop(
+    image_path: Path, box: tuple[float, float, float, float], out_path: Path
+) -> None:
+    """Crop ``image_path`` to ``box`` and save to ``out_path``."""
+    from PIL import Image
+
+    img = Image.open(image_path)
+    width, height = img.size
+    x1, y1, x2, y2 = box
+    left = max(int(x1 * width) - 5, 0)
+    top = max(int(y1 * height) - 5, 0)
+    right = min(int(x2 * width) + 5, width)
+    bottom = min(int(y2 * height) + 5, height)
+    crop = img.crop((left, top, right, bottom))
+    crop.save(out_path)
+
+
+def _find_field_box(
+    words: list[tuple[str, tuple[float, float, float, float]]],
+    patterns: list[str],
+) -> tuple[float, float, float, float] | None:
+    """Return bounding box for the first word matching ``patterns``."""
+    for idx, (text, box) in enumerate(words):
+        if any(re.search(pat, text, re.I) for pat in patterns):
+            x1, y1, x2, y2 = box
+            if idx + 1 < len(words):
+                nxt_text, nxt_box = words[idx + 1]
+                if re.search(r"\d", nxt_text):
+                    x2 = max(x2, nxt_box[2])
+                    y1 = min(y1, nxt_box[1])
+                    y2 = max(y2, nxt_box[3])
+            return x1, y1, x2, y2
+    return None
+
+
+def _find_card_box(
+    words: list[tuple[str, tuple[float, float, float, float]]], last4: str | None
+) -> tuple[float, float, float, float] | None:
+    """Return bounding box for the ``last4`` digits."""
+    if not last4:
+        return None
+    pat = re.compile(re.escape(last4))
+    for text, box in words:
+        if pat.search(text):
+            return box
+    return None
+
+
+def crop_field_images(
+    image_path: Path,
+    words: list[tuple[str, tuple[float, float, float, float]]],
+    fields: ReceiptFields,
+    folder: Path,
+) -> dict[str, Path]:
+    """Crop key fields from ``image_path`` based on OCR ``words``."""
+    folder.mkdir(parents=True, exist_ok=True)
+    crops: dict[str, Path] = {}
+
+    total_box = _find_field_box(words, [r"total", r"amount due", r"balance due"])
+    if total_box:
+        out = folder / f"{image_path.stem}_total.jpg"
+        _save_field_crop(image_path, total_box, out)
+        crops["Total"] = out
+
+    card_box = _find_card_box(words, fields.card_last4)
+    if card_box:
+        out = folder / f"{image_path.stem}_cardlast4.jpg"
+        _save_field_crop(image_path, card_box, out)
+        crops["CardLast4"] = out
+
+    return crops
+
+
 def _log_low_confidence(path: Path, score: float, page: int | None = None) -> None:
     """Log receipts with low confidence scores for later review."""
     details = path.name
@@ -423,7 +507,7 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
     if filepath.suffix.lower() in {".jpg", ".jpeg", ".png"}:
         filepath = preprocess_image(filepath)
 
-    pages = extract_text_pages(filepath)
+    pages, word_boxes = extract_text_pages(filepath)
     fields_list: List[ReceiptFields] = []
     for lines in pages:
         fields = extract_fields(lines, CATEGORY_MAP, VENDOR_MAP)
@@ -453,6 +537,8 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
 
         images_folder = category_folder / "ReceiptImage"
         images_folder.mkdir(parents=True, exist_ok=True)
+        field_folder = category_folder / "FieldImages"
+        field_folder.mkdir(parents=True, exist_ok=True)
 
         try:  # Extract pages as images
             from doctr.io import DocumentFile
@@ -461,7 +547,7 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
         except Exception:
             page_images = []
 
-        for img, fields in zip(page_images, fields_list):
+        for img, fields, boxes in zip(page_images, fields_list, word_boxes):
             safe_vendor = re.sub(r"[^A-Za-z0-9]+", "_", fields.vendor).strip("_") or "receipt"
             date_fmt = _parse_date(fields.date) or "unknown"
             total_val = fields.total if fields.total is not None else 0
@@ -475,6 +561,7 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
             except Exception:
                 pass
             fields.image_path = img_path
+            fields.field_images = crop_field_images(img_path, boxes, fields, field_folder)
     else:
         vendor = fields_list[0].vendor if fields_list else "receipt"
         date_val = fields_list[0].date if fields_list else ""
@@ -483,6 +570,11 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
         shutil.move(str(filepath), str(new_path))
         if fields_list:
             fields_list[0].image_path = new_path
+            field_folder = category_folder / "FieldImages"
+            field_folder.mkdir(parents=True, exist_ok=True)
+            fields_list[0].field_images = crop_field_images(
+                new_path, word_boxes[0] if word_boxes else [], fields_list[0], field_folder
+            )
 
     for idx, f in enumerate(fields_list, start=1):
         if f.confidence_score < LOW_CONFIDENCE_THRESHOLD:
@@ -514,6 +606,9 @@ def _append_to_log(
     if receipt_rows:
         if "confidence_score" not in receipts_df.columns:
             receipts_df["confidence_score"] = None
+        for col in ("Total_Img", "CardLast4_Img"):
+            if col not in receipts_df.columns:
+                receipts_df[col] = ""
         new_receipts = pd.DataFrame(receipt_rows)[RECEIPT_COLUMNS]
         receipts_df = pd.concat([receipts_df, new_receipts], ignore_index=True)
 
@@ -559,6 +654,12 @@ class ReceiptFileHandler(FileSystemEventHandler):
                     "filename": final_path.name,
                     "processed_time": datetime.now().isoformat(),
                     "Receipt_Img": _image_hyperlink(fields.image_path),
+                    "Total_Img": _image_hyperlink(
+                        fields.field_images.get("Total") if fields.field_images else None
+                    ),
+                    "CardLast4_Img": _image_hyperlink(
+                        fields.field_images.get("CardLast4") if fields.field_images else None
+                    ),
                 }
                 records.append(record)
 
@@ -610,6 +711,12 @@ def run_batch() -> None:
                         "filename": final_path.name,
                         "processed_time": datetime.now().isoformat(),
                         "Receipt_Img": _image_hyperlink(fields.image_path),
+                        "Total_Img": _image_hyperlink(
+                            fields.field_images.get("Total") if fields.field_images else None
+                        ),
+                        "CardLast4_Img": _image_hyperlink(
+                            fields.field_images.get("CardLast4") if fields.field_images else None
+                        ),
                     }
                     records.append(record)
 

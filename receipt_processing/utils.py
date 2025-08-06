@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
@@ -177,6 +177,7 @@ class ReceiptFields:
     lines: list[str]
     line_items: list[dict[str, Any]]
     image_path: Optional[Path] = None
+    field_images: dict[str, Path] = field(default_factory=dict)
     confidence_score: float = 0.0
 
 
