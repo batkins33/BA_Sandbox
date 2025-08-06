@@ -7,6 +7,7 @@ from .utils import (
     compute_confidence_score,
     load_vendor_categories,
     vendor_csv_to_json,
+    register_vendor_template,
 )
 
 __all__ = [
@@ -16,5 +17,6 @@ __all__ = [
     "compute_confidence_score",
     "load_vendor_categories",
     "vendor_csv_to_json",
+    "register_vendor_template",
 ]
 

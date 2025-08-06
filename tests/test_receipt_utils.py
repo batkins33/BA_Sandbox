@@ -4,6 +4,7 @@ from receipt_processing import (
     ReceiptFields,
     assign_item_category,
     compute_confidence_score,
+    register_vendor_template,
 )
 
 
@@ -207,4 +208,24 @@ def test_confidence_score_low():
     fields = extract_fields(lines)
     score = compute_confidence_score(fields)
     assert score < 0.5
+
+
+def test_vendor_specific_template_mcdonalds():
+    lines = [
+        "McDonald's",
+        "AMT DUE 5.00",
+    ]
+    fields = extract_fields(lines)
+    assert fields.vendor == "McDonald's"
+    assert fields.total == 5.00
+
+
+def test_register_vendor_template():
+    def extractor(_: list[str]) -> dict[str, float]:
+        return {"total": 9.99}
+
+    register_vendor_template("Test Vendor", extractor)
+    lines = ["Test Vendor", "Some line"]
+    fields = extract_fields(lines)
+    assert fields.total == 9.99
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import pandas as pd
 import yaml
@@ -38,6 +38,81 @@ except FileNotFoundError:  # pragma: no cover - configuration optional
 # Default local sales tax rate used for inferring taxable items when
 # receipts do not explicitly mark them.
 LOCAL_SALES_TAX_RATE = 0.08
+
+
+# ---------------------------------------------------------------------------
+# Vendor specific extraction templates
+# ---------------------------------------------------------------------------
+
+VendorExtractor = Callable[[list[str]], dict[str, Any]]
+
+
+VENDOR_TEMPLATES: dict[str, VendorExtractor] = {}
+
+
+def register_vendor_template(name: str, extractor: VendorExtractor) -> None:
+    """Register a vendor specific extraction ``extractor``.
+
+    The ``extractor`` should accept the OCR ``lines`` and return a mapping of
+    field overrides such as ``{"total": 12.34}``.  Registering via this
+    function keeps configuration simple and allows callers to easily extend the
+    built-in templates.
+    """
+
+    VENDOR_TEMPLATES[name.lower()] = extractor
+
+
+def _extract_walmart(lines: list[str]) -> dict[str, Any]:
+    """Custom parsing rules for Walmart receipts."""
+
+    text = "\n".join(lines)
+    result: dict[str, Any] = {}
+    # Walmart frequently labels totals with "TOTAL"; this serves mainly as an
+    # example of a template hook.
+    m = re.search(r"TOTAL\s*\$?([0-9]+[.,][0-9]{2})", text, re.I)
+    if m:
+        result["total"] = float(m.group(1).replace(",", ""))
+    return result
+
+
+def _extract_costco(lines: list[str]) -> dict[str, Any]:
+    """Custom parsing rules for Costco receipts."""
+
+    text = "\n".join(lines)
+    result: dict[str, Any] = {}
+    m = re.search(r"SUB\s*TOTAL\s*\$?([0-9]+[.,][0-9]{2})", text, re.I)
+    if m:
+        result["subtotal"] = float(m.group(1).replace(",", ""))
+    return result
+
+
+def _extract_mcdonalds(lines: list[str]) -> dict[str, Any]:
+    """Custom parsing rules for McDonald's receipts."""
+
+    text = "\n".join(lines)
+    result: dict[str, Any] = {}
+    # McDonald's receipts often abbreviate "Amount Due" as "AMT DUE" which the
+    # generic parser may miss.
+    m = re.search(r"AMT\s+DUE\s*\$?([0-9]+[.,][0-9]{2})", text, re.I)
+    if m:
+        result["total"] = float(m.group(1).replace(",", ""))
+    return result
+
+
+# Register built-in templates
+for _name, _fn in {
+    "Walmart": _extract_walmart,
+    "Costco": _extract_costco,
+    "McDonald's": _extract_mcdonalds,
+}.items():
+    register_vendor_template(_name, _fn)
+
+
+def apply_vendor_template(vendor: str, lines: list[str]) -> dict[str, Any]:
+    """Return field overrides for ``vendor`` if a template exists."""
+
+    extractor = VENDOR_TEMPLATES.get(vendor.lower())
+    return extractor(lines) if extractor else {}
 
 
 def assign_item_category(
@@ -413,20 +488,33 @@ def extract_fields(
     # Attempt to determine vendor by scanning all lines for known patterns
     vendor = "Unknown"
     vendor_patterns: dict[str, re.Pattern[str]] = {
-        "costco": re.compile(r"costco|member\s*(?:id|#)", re.I),
-        "walmart": re.compile(r"wal[-\s]?mart", re.I),
-        "target": re.compile(r"target", re.I),
-        "home depot": re.compile(r"home\s+depot", re.I),
+        "Costco": re.compile(r"costco|member\s*(?:id|#)", re.I),
+        "Walmart": re.compile(r"wal[-\s]?mart", re.I),
+        "Target": re.compile(r"target", re.I),
+        "Home Depot": re.compile(r"home\s+depot", re.I),
+        "McDonald's": re.compile(r"mc\s*donald'?s", re.I),
     }
     for line in lines:
         for name, pattern in vendor_patterns.items():
             if pattern.search(line):
-                vendor = name.title()
+                vendor = name
                 break
         if vendor != "Unknown":
             break
     if vendor == "Unknown" and lines:
         vendor = lines[0]
+
+    # Apply vendor specific templates to override parsed fields
+    overrides = apply_vendor_template(vendor, list(lines))
+    if "date" in overrides and not date:
+        date = overrides["date"]
+    subtotal = overrides.get("subtotal", subtotal)
+    tax = overrides.get("tax", tax)
+    total = overrides.get("total", total)
+    payment_method = overrides.get("payment_method", payment_method)
+    card_last4 = overrides.get("card_last4", card_last4)
+    if overrides.get("line_items"):
+        line_items = overrides["line_items"]
 
     category = "uncategorized"
     if vendor_lookup:
