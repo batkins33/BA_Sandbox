@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -159,6 +160,18 @@ def vendor_csv_to_json(csv_path: str | Path, json_path: str | Path) -> None:
     """Convert vendor category CSV to JSON lookup file."""
     mapping = load_vendor_categories(csv_path)
     pd.Series(mapping).to_json(json_path)
+
+
+def compute_receipt_signature(vendor: str, date: str, total: float | None) -> str:
+    """Return a stable hash for a receipt.
+
+    The signature is based on the vendor, date and total amount which are
+    sufficient to uniquely identify a receipt in most cases.
+    """
+
+    amount = f"{float(total):.2f}" if total is not None else ""
+    base = f"{vendor.strip().lower()}|{date.strip()}|{amount}"
+    return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
 @dataclass
 class ReceiptFields:
