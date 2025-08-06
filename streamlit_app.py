@@ -8,7 +8,10 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from receipt_processing.config import CONFIG
+
 LOG_FILE = Path(os.getenv("RECEIPT_LOG_PATH", "receipt_log.xlsx"))
+LOW_CONF_THRESHOLD = CONFIG["low_confidence_threshold"]
 
 st.title("Receipt Review")
 
@@ -36,14 +39,20 @@ else:
         ]
     )
 
+if "confidence_score" not in df.columns:
+    df["confidence_score"] = None
+df["needs_review"] = df["confidence_score"].fillna(0) < LOW_CONF_THRESHOLD
+
 # Filters
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     vendor_filter = st.text_input("Vendor contains")
 with col2:
     category_filter = st.text_input("Category contains")
 with col3:
     date_filter = st.text_input("Date contains")
+with col4:
+    low_conf_only = st.checkbox("Low confidence only")
 
 filtered_df = df.copy()
 if vendor_filter:
@@ -52,8 +61,19 @@ if category_filter:
     filtered_df = filtered_df[filtered_df["category"].str.contains(category_filter, case=False, na=False)]
 if date_filter:
     filtered_df = filtered_df[filtered_df["date"].astype(str).str.contains(date_filter)]
+if low_conf_only:
+    filtered_df = filtered_df[filtered_df["needs_review"]]
 
-edited_df = st.data_editor(filtered_df, num_rows="dynamic", key="editor")
+edited_df = st.data_editor(
+    filtered_df,
+    num_rows="dynamic",
+    key="editor",
+    column_config={
+        "confidence_score": st.column_config.ProgressColumn(
+            "Confidence", min_value=0.0, max_value=1.0, format="%.2f"
+        )
+    },
+)
 
 with st.expander("Bulk assign category to vendor"):
     bulk_vendor = st.text_input("Vendor name")
@@ -65,6 +85,7 @@ with st.expander("Bulk assign category to vendor"):
 
 if st.button("Save changes"):
     df.update(edited_df)
+    df["needs_review"] = df["confidence_score"].fillna(0) < LOW_CONF_THRESHOLD
     df.to_excel(LOG_FILE, index=False)
     st.success("Changes saved")
 
