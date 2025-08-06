@@ -2,7 +2,7 @@
 
 This repository contains small experiments with document analysis. The most complete example is the **receipt analyzer** located under `analyzer_projects/Lindamood_Ticket_Analyzer_v1`.
 
-The receipt analyzer monitors a directory for new receipt images or PDFs, extracts information using OCR and simple regular expressions, then organizes the files into category folders while keeping a log in an Excel workbook. Each receipt's line items are exported to a separate **LineItems** sheet in the same workbook. Image receipts are cropped before OCR and renamed based on the detected vendor and date. Cropping can be disabled by setting ``AUTO_CROP_ENABLED = False`` in ``receipt_processing/main.py`` if it causes issues with your photos.
+The receipt analyzer monitors a directory for new receipt images or PDFs, extracts information using OCR and simple regular expressions, then organizes the files into category folders while keeping a log in an Excel workbook. Each receipt's line items are exported to a separate **LineItems** sheet in the same workbook. Image receipts are cropped before OCR and renamed based on the detected vendor and date. Configuration such as input/output paths, tax rate and cropping behaviour is stored in ``config.yaml``; cropping can be disabled by setting ``auto_crop_enabled: false`` in that file if it causes issues with your photos.
 
 The `WM_Invoice_Parser` directory holds earlier invoice extraction tests and is not integrated with the receipt analyzer.
 
@@ -12,7 +12,7 @@ The `WM_Invoice_Parser` directory holds earlier invoice extraction tests and is 
   PYTHONPATH=analyzer_projects/Lindamood_Ticket_Analyzer_v1 pytest
   ```
 - Multi-page PDFs can be parsed page-by-page using the new `process_receipt_pages` helper.
-- Further information is available in `docs/receipt_analyzer_user_guide.md` and `docs/receipt_analyzer_technical_details.md`.
+- Further information is available in `docs/receipt_analyzer_user_guide.md`, `docs/receipt_analyzer_technical_details.md` and `docs/config_reference.md`.
 
 ## Streamlit Review UI
 Run a small web UI to review and correct logged receipts:

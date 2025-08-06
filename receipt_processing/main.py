@@ -18,6 +18,7 @@ from watchdog.observers import Observer
 
 import pandas as pd
 
+from config import CONFIG
 from integrations import (
     push_to_firefly,
     push_to_google_sheets,
@@ -41,10 +42,10 @@ except Exception:  # pragma: no cover - optional
 
 
 # --- Configuration ---
-INPUT_DIR = Path(r"C:\Users\brian.atkins\Dropbox\Personal\Receipts\input")
-OUTPUT_DIR = Path(r"G:\My Drive\receipts\processed")
-LOG_FILE = Path(r"G:\My Drive\receipts\receipt_log.xlsx")
-LINE_ITEMS_SHEET = "LineItems"
+INPUT_DIR = CONFIG["input_dir"]
+OUTPUT_DIR = CONFIG["output_dir"]
+LOG_FILE = CONFIG["log_file"]
+LINE_ITEMS_SHEET = CONFIG["line_items_sheet"]
 
 RECEIPT_COLUMNS = [
     "receipt_id",
@@ -79,18 +80,23 @@ LINE_ITEM_COLUMNS = [
 
 # Enable or disable automatic image cropping prior to OCR.  Set to ``False``
 # if the cropping logic negatively impacts OCR accuracy for your photos.
-AUTO_CROP_ENABLED = True
-AUTO_ORIENT_ENABLED = True
+AUTO_CROP_ENABLED = CONFIG["auto_crop_enabled"]
+AUTO_ORIENT_ENABLED = CONFIG["auto_orient_enabled"]
 
 # Optional vendor categorization via CSV mapping
-USE_VENDOR_CSV = True
-VENDOR_CSV_PATH = Path("vendor_categories.csv")
-VENDOR_MAP = load_vendor_categories(VENDOR_CSV_PATH) if USE_VENDOR_CSV and VENDOR_CSV_PATH.exists() else None
+USE_VENDOR_CSV = CONFIG["use_vendor_csv"]
+VENDOR_CSV_PATH = CONFIG.get("vendor_csv_path")
+VENDOR_MAP = (
+    load_vendor_categories(VENDOR_CSV_PATH)
+    if USE_VENDOR_CSV and VENDOR_CSV_PATH and VENDOR_CSV_PATH.exists()
+    else None
+)
 ML_MODEL = load_model()
 
-LOW_CONFIDENCE_THRESHOLD = 0.6
-LOW_CONFIDENCE_LOG = Path("low_confidence_receipts.log")
+LOW_CONFIDENCE_THRESHOLD = CONFIG["low_confidence_threshold"]
+LOW_CONFIDENCE_LOG = CONFIG["low_confidence_log"]
 LOG_LOCK = Lock()
+CROP_PAD = CONFIG["cropping_pad"]
 
 
 
@@ -180,7 +186,7 @@ def auto_crop_receipt_image(img: "np.ndarray") -> "np.ndarray":
     x, y, w, h = cv2.boundingRect(coords)
 
     # Add a small margin around the detected region
-    pad = 10
+    pad = CROP_PAD
     x, y = max(0, x - pad), max(0, y - pad)
     w = min(img.shape[1] - x, w + 2 * pad)
     h = min(img.shape[0] - y, h + 2 * pad)

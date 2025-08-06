@@ -1,0 +1,16 @@
+input_dir: "C:\\Users\\brian.atkins\\Dropbox\\Personal\\Receipts\\input"
+output_dir: "G:\\My Drive\\receipts\\processed"
+log_file: "G:\\My Drive\\receipts\\receipt_log.xlsx"
+line_items_sheet: "LineItems"
+auto_crop_enabled: true
+auto_orient_enabled: true
+use_vendor_csv: true
+vendor_csv_path: "vendor_categories.csv"
+low_confidence_threshold: 0.6
+low_confidence_log: "low_confidence_receipts.log"
+local_sales_tax_rate: 0.08
+cropping_pad: 10
+category_map:
+  fuel: ["shell", "chevron", "exxon", "gas"]
+  meals: ["restaurant", "grill", "mcdonald", "subway", "burger"]
+  supplies: ["office depot", "staples", "lowes", "home depot"]
