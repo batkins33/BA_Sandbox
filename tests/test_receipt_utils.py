@@ -1,9 +1,7 @@
 import pytest
-from receipt_processing.utils import (
+from receipt_processing import (
     extract_fields,
     ReceiptFields,
-    CATEGORY_MAP,
-    load_vendor_categories,
     assign_item_category,
 )
 
@@ -181,7 +179,7 @@ def test_assign_item_category_match():
     assert assign_item_category("Diet Cola", keyword_map) == "beverage"
 
 
-def test_assign_item_category_uncategorized():
+def test_assign_item_category_other():
     keyword_map = {"food": ["burger"]}
-    assert assign_item_category("Laptop Sleeve", keyword_map) == "uncategorized"
+    assert assign_item_category("Laptop Sleeve", keyword_map) == "Other"
 

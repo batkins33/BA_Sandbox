@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 import pandas as pd
+import yaml
 
 # Default categories mapped to vendor keywords
 CATEGORY_MAP: dict[str, list[str]] = {
@@ -16,11 +17,23 @@ CATEGORY_MAP: dict[str, list[str]] = {
     "supplies": ["office depot", "staples", "lowes", "home depot"],
 }
 
-# Default item categories mapped to line item keywords
-ITEM_CATEGORY_MAP: dict[str, list[str]] = {
-    "food": ["burger", "fries", "sandwich"],
-    "drink": ["soda", "water", "coffee"],
-}
+# Path to the item category keyword mapping
+ITEM_CATEGORY_FILE = Path(__file__).with_name("item_categories.yaml")
+
+
+def load_item_category_map(path: str | Path = ITEM_CATEGORY_FILE) -> dict[str, list[str]]:
+    """Load item category keywords from a YAML file."""
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return {str(cat): [str(k) for k in kws] for cat, kws in data.items()}
+
+
+try:  # Load default map at import time; fall back to empty mapping
+    ITEM_CATEGORY_MAP = load_item_category_map()
+except FileNotFoundError:  # pragma: no cover - configuration optional
+    ITEM_CATEGORY_MAP = {}
+
 
 # Default local sales tax rate used for inferring taxable items when
 # receipts do not explicitly mark them.
@@ -33,7 +46,7 @@ def assign_item_category(
     """Return an item category based on keywords in ``description``.
 
     The mapping is case-insensitive and returns the first category with a
-    matching keyword. If no keywords match, ``"uncategorized"`` is returned.
+    matching keyword. If no keywords match, ``"Other"`` is returned.
 
     Parameters
     ----------
@@ -46,7 +59,7 @@ def assign_item_category(
     Returns
     -------
     str
-        The matched category or ``"uncategorized"`` if no match is found.
+        The matched category or ``"Other"`` if no match is found.
     """
 
     keyword_map = keyword_map or ITEM_CATEGORY_MAP
@@ -55,7 +68,7 @@ def assign_item_category(
     for category, keywords in keyword_map.items():
         if any(kw.casefold() in desc for kw in keywords):
             return category
-    return "uncategorized"
+    return "Other"
 
 
 def load_vendor_categories(csv_path: str | Path) -> dict[str, str]:
