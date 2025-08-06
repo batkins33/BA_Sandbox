@@ -3,6 +3,7 @@
 This repository contains small experiments with document analysis. The most complete example is the **receipt analyzer** located under `analyzer_projects/Lindamood_Ticket_Analyzer_v1`.
 
 The receipt analyzer monitors a directory for new receipt images or PDFs, extracts information using OCR and simple regular expressions, then organizes the files into category folders while keeping a log in an Excel workbook. Each receipt's line items are exported to a separate **LineItems** sheet in the same workbook. Image receipts are cropped before OCR and renamed based on the detected vendor and date. Configuration such as input/output paths, tax rate and cropping behaviour is stored in ``config.yaml``; cropping can be disabled by setting ``auto_crop_enabled: false`` in that file if it causes issues with your photos.
+Small JPEG crops are also generated for any fields listed in ``receipt_processing/extraction_rules.yaml``—for example ticket numbers or manifest identifiers—which are saved in a ``FieldImages`` subfolder using the field description as the filename suffix.
 
 The `WM_Invoice_Parser` directory holds earlier invoice extraction tests and is not integrated with the receipt analyzer.
 
