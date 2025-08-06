@@ -102,6 +102,49 @@ class ReceiptFields:
     lines: list[str]
     line_items: list[dict[str, Any]]
     image_path: Optional[Path] = None
+    confidence_score: float = 0.0
+
+
+def compute_confidence_score(fields: "ReceiptFields") -> float:
+    """Return a heuristic confidence score for parsed ``fields``."""
+
+    checks: list[float] = []
+
+    key_fields = [
+        bool(fields.vendor and fields.vendor != "Unknown"),
+        bool(fields.date),
+        fields.subtotal is not None,
+        fields.tax is not None,
+        fields.total is not None,
+        fields.payment_method is not None,
+        fields.card_last4 is not None,
+        bool(fields.line_items),
+    ]
+    checks.append(sum(key_fields) / len(key_fields))
+
+    if fields.subtotal is not None and fields.tax is not None and fields.total is not None:
+        math_ok = abs((fields.subtotal + fields.tax) - fields.total) <= 0.01
+        checks.append(1.0 if math_ok else 0.0)
+
+    if fields.line_items:
+        if fields.subtotal is not None:
+            item_sum = sum(
+                item["price"] * (item.get("quantity") or 1) for item in fields.line_items
+            )
+            item_sum = round(item_sum, 2)
+            sum_ok = abs(item_sum - fields.subtotal) <= 0.02
+            checks.append(1.0 if sum_ok else 0.0)
+
+        full_text = "\n".join(fields.lines).lower()
+        m = re.search(r"(\d+)\s+items?", full_text)
+        if m:
+            expected = int(m.group(1))
+            count_ok = expected == len(fields.line_items)
+            checks.append(1.0 if count_ok else 0.0)
+
+    if not checks:
+        return 0.0
+    return round(sum(checks) / len(checks), 2)
 
 
 def _last_amount(line: str) -> Optional[float]:

@@ -3,6 +3,7 @@ from receipt_processing import (
     extract_fields,
     ReceiptFields,
     assign_item_category,
+    compute_confidence_score,
 )
 
 
@@ -182,4 +183,28 @@ def test_assign_item_category_match():
 def test_assign_item_category_other():
     keyword_map = {"food": ["burger"]}
     assert assign_item_category("Laptop Sleeve", keyword_map) == "Other"
+
+
+def test_confidence_score_high():
+    lines = [
+        "Store",
+        "Date: 01/01/2024",
+        "Apple 1.00",
+        "Banana 1.00",
+        "Subtotal 2.00",
+        "Tax 0.16",
+        "Total 2.16",
+        "Visa **** 1234",
+        "2 items",
+    ]
+    fields = extract_fields(lines)
+    score = compute_confidence_score(fields)
+    assert score == 1.0
+
+
+def test_confidence_score_low():
+    lines = ["Store", "Total 10.00"]
+    fields = extract_fields(lines)
+    score = compute_confidence_score(fields)
+    assert score < 0.5
 

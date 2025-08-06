@@ -22,7 +22,13 @@ from integrations import (
     push_to_sharepoint,
 )
 from ml_categorizer import load_model, predict_category
-from utils import CATEGORY_MAP, ReceiptFields, extract_fields, load_vendor_categories
+from utils import (
+    CATEGORY_MAP,
+    ReceiptFields,
+    compute_confidence_score,
+    extract_fields,
+    load_vendor_categories,
+)
 
 try:  # Optional dependency for image processing
     import cv2  # type: ignore
@@ -48,6 +54,7 @@ RECEIPT_COLUMNS = [
     "category",
     "payment_method",
     "card_last4",
+    "confidence_score",
     "line_items",
     "filename",
     "processed_time",
@@ -76,6 +83,9 @@ USE_VENDOR_CSV = True
 VENDOR_CSV_PATH = Path("vendor_categories.csv")
 VENDOR_MAP = load_vendor_categories(VENDOR_CSV_PATH) if USE_VENDOR_CSV and VENDOR_CSV_PATH.exists() else None
 ML_MODEL = load_model()
+
+LOW_CONFIDENCE_THRESHOLD = 0.6
+LOW_CONFIDENCE_LOG = Path("low_confidence_receipts.log")
 
 
 
@@ -338,6 +348,17 @@ def _image_hyperlink(path: Path | None) -> str:
     return f'=HYPERLINK("{path}", "Image")'
 
 
+def _log_low_confidence(path: Path, score: float, page: int | None = None) -> None:
+    """Log receipts with low confidence scores for later review."""
+    details = path.name
+    if page is not None:
+        details = f"{details} [page {page}]"
+    message = f"{datetime.now().isoformat()} - {details} score={score:.2f}"
+    print(f"[LOW CONFIDENCE] {message}")
+    with open(LOW_CONFIDENCE_LOG, "a", encoding="utf-8") as fh:
+        fh.write(message + "\n")
+
+
 def rename_receipt_file(filepath: Path, vendor: str, date_str: str) -> Path:
     """Rename the file as ``Vendor_TransactionDate_ProcessedTimestamp``.
 
@@ -375,12 +396,18 @@ def process_receipt(filepath: Path) -> ReceiptFields:
         if pred and conf >= 0.5:
             fields.category = pred
 
+    fields.confidence_score = compute_confidence_score(fields)
+
     filepath = rename_receipt_file(filepath, fields.vendor, fields.date)
 
     category_folder = OUTPUT_DIR / fields.category
     category_folder.mkdir(parents=True, exist_ok=True)
     new_path = category_folder / filepath.name
     shutil.move(str(filepath), str(new_path))
+
+    fields.image_path = new_path
+    if fields.confidence_score < LOW_CONFIDENCE_THRESHOLD:
+        _log_low_confidence(new_path, fields.confidence_score)
 
     receipt_data = asdict(fields)
     push_to_firefly(receipt_data)
@@ -406,6 +433,7 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
             )
             if pred and conf >= 0.5:
                 fields.category = pred
+        fields.confidence_score = compute_confidence_score(fields)
         fields_list.append(fields)
 
     # Determine destination folder based on first page's category
@@ -456,7 +484,9 @@ def process_receipt_pages(filepath: Path) -> tuple[List[ReceiptFields], Path]:
         if fields_list:
             fields_list[0].image_path = new_path
 
-    for f in fields_list:
+    for idx, f in enumerate(fields_list, start=1):
+        if f.confidence_score < LOW_CONFIDENCE_THRESHOLD:
+            _log_low_confidence(new_path, f.confidence_score, page=idx if len(fields_list) > 1 else None)
         receipt_data = asdict(f)
         push_to_firefly(receipt_data)
         push_to_google_sheets(receipt_data)
@@ -482,6 +512,8 @@ def _append_to_log(
         items_df = pd.DataFrame(columns=LINE_ITEM_COLUMNS)
 
     if receipt_rows:
+        if "confidence_score" not in receipts_df.columns:
+            receipts_df["confidence_score"] = None
         new_receipts = pd.DataFrame(receipt_rows)[RECEIPT_COLUMNS]
         receipts_df = pd.concat([receipts_df, new_receipts], ignore_index=True)
 
@@ -522,6 +554,7 @@ class ReceiptFileHandler(FileSystemEventHandler):
                     "category": fields.category,
                     "payment_method": fields.payment_method,
                     "card_last4": fields.card_last4,
+                    "confidence_score": fields.confidence_score,
                     "line_items": json.dumps(fields.line_items) if fields.line_items else "",
                     "filename": final_path.name,
                     "processed_time": datetime.now().isoformat(),
@@ -572,6 +605,7 @@ def run_batch() -> None:
                         "category": fields.category,
                         "payment_method": fields.payment_method,
                         "card_last4": fields.card_last4,
+                        "confidence_score": fields.confidence_score,
                         "line_items": json.dumps(fields.line_items) if fields.line_items else "",
                         "filename": final_path.name,
                         "processed_time": datetime.now().isoformat(),
