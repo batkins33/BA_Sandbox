@@ -1,9 +1,7 @@
 import pytest
-from receipt_processing.utils import (
+from receipt_processing import (
     extract_fields,
     ReceiptFields,
-    CATEGORY_MAP,
-    load_vendor_categories,
     assign_item_category,
 )
 
