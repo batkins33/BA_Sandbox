@@ -36,3 +36,16 @@ python -m receipt_processing.ml_categorizer <path/to/receipt_log.xlsx>
 This creates `receipt_category_model.joblib`. The main pipeline will use it
 automatically when present.
 
+
+## Combine Manifest PDFs
+
+The `combine_manifest_pdf` module provides a helper and CLI to merge multiple
+manifest PDF files into a single document.
+
+- [User Guide](docs/combine_manifest_pdf_user_guide.md)
+- [Technical Details](docs/combine_manifest_pdf_technical_details.md)
+
+Example usage:
+```bash
+python -m combine_manifest_pdf.main combined.pdf manifest1.pdf manifest2.pdf
+```
