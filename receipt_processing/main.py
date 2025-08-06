@@ -212,7 +212,14 @@ def correct_orientation(image_path: Path) -> Path:
 
 
 def deskew_image(image_path: Path) -> Path:
-    """Detect and correct minor skew in the receipt image."""
+    """Detect skew and correct perspective before OCR.
+
+    The function first estimates the dominant rotation angle using
+    ``cv2.HoughLines`` on Canny edges.  The image is rotated to make text
+    horizontal.  It then searches for a large four-point contour and, if
+    found, performs a perspective transform to deskew angled photos.
+    """
+
     if cv2 is None or np is None:
         return image_path
 
@@ -220,28 +227,61 @@ def deskew_image(image_path: Path) -> Path:
     if img is None:
         return image_path
 
+    # --- Step 1: rotation via Hough line angle ---
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.bitwise_not(gray)
-    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
-    coords = cv2.findNonZero(thresh)
-    if coords is None:
-        return image_path
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    lines = cv2.HoughLines(edges, 1, np.pi / 180.0, 200)
+    angle = 0.0
+    if lines is not None and len(lines) > 0:
+        angles = [(theta * 180.0 / np.pi) - 90 for rho, theta in lines[:, 0]]
+        angle = float(np.median(angles))
+        if abs(angle) > 0.1:
+            h, w = img.shape[:2]
+            M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
+            img = cv2.warpAffine(
+                img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+            )
 
-    angle = cv2.minAreaRect(coords)[-1]
-    if angle < -45:
-        angle = -(90 + angle)
-    else:
-        angle = -angle
+    # --- Step 2: perspective correction using contour ---
+    def _order_points(pts: "np.ndarray") -> "np.ndarray":
+        rect = np.zeros((4, 2), dtype="float32")
+        s = pts.sum(axis=1)
+        rect[0] = pts[np.argmin(s)]
+        rect[2] = pts[np.argmax(s)]
+        diff = np.diff(pts, axis=1)
+        rect[1] = pts[np.argmin(diff)]
+        rect[3] = pts[np.argmax(diff)]
+        return rect
 
-    if abs(angle) < 0.1:
-        return image_path
+    try:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        cnts = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+        if cnts:
+            biggest = max(cnts, key=cv2.contourArea)
+            peri = cv2.arcLength(biggest, True)
+            approx = cv2.approxPolyDP(biggest, 0.02 * peri, True)
+            if len(approx) == 4:
+                pts = approx.reshape(4, 2).astype("float32")
+                rect = _order_points(pts)
+                (tl, tr, br, bl) = rect
+                widthA = np.linalg.norm(br - bl)
+                widthB = np.linalg.norm(tr - tl)
+                maxW = int(max(widthA, widthB))
+                heightA = np.linalg.norm(tr - br)
+                heightB = np.linalg.norm(tl - bl)
+                maxH = int(max(heightA, heightB))
+                dst = np.array(
+                    [[0, 0], [maxW - 1, 0], [maxW - 1, maxH - 1], [0, maxH - 1]],
+                    dtype="float32",
+                )
+                M = cv2.getPerspectiveTransform(rect, dst)
+                img = cv2.warpPerspective(img, M, (maxW, maxH))
+    except Exception:
+        pass
 
-    h, w = img.shape[:2]
-    M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
-    rotated = cv2.warpAffine(
-        img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
-    )
-    cv2.imwrite(str(image_path), rotated)
+    cv2.imwrite(str(image_path), img)
     return image_path
 
 
