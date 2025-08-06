@@ -17,6 +17,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 import pandas as pd
+import yaml
 
 from config import CONFIG
 from integrations import (
@@ -99,6 +100,14 @@ LOW_CONFIDENCE_THRESHOLD = CONFIG["low_confidence_threshold"]
 LOW_CONFIDENCE_LOG = CONFIG["low_confidence_log"]
 LOG_LOCK = Lock()
 CROP_PAD = CONFIG["cropping_pad"]
+
+# Extraction rules for field cropping
+EXTRACTION_RULES_PATH = Path(__file__).with_name("extraction_rules.yaml")
+try:  # pragma: no cover - file may not exist in some deployments
+    with open(EXTRACTION_RULES_PATH, "r", encoding="utf-8") as fh:
+        EXTRACTION_RULES = yaml.safe_load(fh) or {}
+except FileNotFoundError:  # pragma: no cover
+    EXTRACTION_RULES = {}
 
 
 
@@ -384,7 +393,7 @@ def _save_field_crop(
     right = min(int(x2 * width) + 5, width)
     bottom = min(int(y2 * height) + 5, height)
     crop = img.crop((left, top, right, bottom))
-    crop.save(out_path)
+    crop.save(out_path, format="JPEG", quality=85, optimize=True)
 
 
 def _find_field_box(
@@ -424,21 +433,32 @@ def crop_field_images(
     fields: ReceiptFields,
     folder: Path,
 ) -> dict[str, Path]:
-    """Crop key fields from ``image_path`` based on OCR ``words``."""
+    """Crop key fields from ``image_path`` based on OCR ``words``.
+
+    Cropping rules are defined in ``extraction_rules.yaml`` with one entry per
+    field.  Each field provides either a list of regex ``patterns`` or a
+    ``dynamic`` hint such as ``card_last4``.  Cropped images are saved as JPEGs
+    using the field name as the suffix (e.g. ``*_Total.jpg``).
+    """
     folder.mkdir(parents=True, exist_ok=True)
     crops: dict[str, Path] = {}
 
-    total_box = _find_field_box(words, [r"total", r"amount due", r"balance due"])
-    if total_box:
-        out = folder / f"{image_path.stem}_total.jpg"
-        _save_field_crop(image_path, total_box, out)
-        crops["Total"] = out
+    field_rules: dict[str, dict] = EXTRACTION_RULES.get("fields", {})
+    for name, rule in field_rules.items():
+        suffix = rule.get("suffix", name)
+        box: tuple[float, float, float, float] | None = None
 
-    card_box = _find_card_box(words, fields.card_last4)
-    if card_box:
-        out = folder / f"{image_path.stem}_cardlast4.jpg"
-        _save_field_crop(image_path, card_box, out)
-        crops["CardLast4"] = out
+        if rule.get("dynamic") == "card_last4":
+            box = _find_card_box(words, fields.card_last4)
+        else:
+            patterns = rule.get("patterns")
+            if patterns:
+                box = _find_field_box(words, patterns)
+
+        if box:
+            out = folder / f"{image_path.stem}_{suffix}.jpg"
+            _save_field_crop(image_path, box, out)
+            crops[name] = out
 
     return crops
 
