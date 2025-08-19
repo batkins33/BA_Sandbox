@@ -1,0 +1,248 @@
+Title,Body,Labels,Milestone
+EPIC: Receipt Processing MVP,"Goal: A reliable, reviewable pipeline that ingests receipts (PDF/JPG/PNG), extracts fields + line items, and exports a clean dataset + reports.
+
+Scope:
+- Ingestion (watch folder + manual upload)
+- OCR abstraction (DocTR default; optional Textract AnalyzeExpense adapter)
+- Core field extraction (date, merchant, subtotal, tax, tip, total, currency, payment method, last4 if present)
+- Line item parsing (description, qty, unit price, amount)
+- Validation + duplicate detection
+- Streamlit review UI
+- Excel/PDF exports with branding & hyperlinks
+- SQLite storage + schema
+
+Acceptance:
+- Process a mixed folder of 100+ receipts in under 10 minutes on typical laptop.
+- ≥ 95% correct totals; ≥ 90% correct dates; ≥ 85% correct merchant names on benchmark set.
+- Reviewer can fix any field in UI; edits persisted to DB and exports.
+- Single command `receipt_app run --config configs/config.yaml` completes pipeline.","type:epic, priority:P0, milestone:MVP, area:product",v0.1 MVP
+Create ingestion service: watch folder + manual file picker,"Implement two inputs:
+1) Watch folder (configurable). Auto-import new files; move to `processed/failed`.
+2) Manual upload via CLI and Streamlit.
+
+Acceptance:
+- Supports PDF/JPG/PNG/TIFF.
+- De-duplicates by content hash and page image hash.
+- Logs each import with timestamp, source, and hash.","type:feature, priority:P0, area:ingestion, milestone:MVP",v0.1 MVP
+OCR engine abstraction with DocTR default (pluggable engines),"Build `ocr/engine.py` with a clean interface: `recognize(images, lang)`.
+- Default: DocTR (Python 3.10 friendly)
+- Optional adapters: AWS Textract AnalyzeExpense (behind feature flag), Tesseract (fallback)
+
+Acceptance:
+- Switch via config `ocr.engine: doctr|textract|tesseract`.
+- Uniform output schema: words, lines, blocks with bbox + confidence.
+- Auto-rotate/deskew; DPI normalization; grayscale + binarization toggles.","type:feature, priority:P0, area:ocr, milestone:MVP",v0.1 MVP
+"Preprocessing pipeline for scans (deskew, denoise, contrast, threshold)","Add image preprocessing with config flags:
+- Auto-rotate, deskew, dewarp (mild), denoise
+- Contrast/brightness/gamma, adaptive threshold
+- Edge sharpening (optional)
+- PDF page rasterization at target DPI
+
+Acceptance:
+- Improves OCR word recall ≥ 3% on benchmark.
+- Per-file debug images saved when `debug:true`.","type:feature, priority:P1, area:ocr, milestone:MVP",v0.1 MVP
+Vendor detection + normalization map,"Detect merchant/vendor via logo/text heuristics + fuzzy match.
+- Maintain `configs/vendor_aliases.yaml` (e.g., 'WAL-MART', 'Walmart Inc.').
+- Confidence scoring; expose in UI.
+
+Acceptance:
+- ≥ 90% correct merchant on benchmark or offer top-3 suggestions for quick pick.","type:feature, priority:P0, area:extraction",v0.1 MVP
+"Field extraction: date, subtotal, tax, tip, total, currency, payment method","Implement robust parsing with locale-aware date + currency.
+- Heuristics + regex selectors using OCR structure (key-value proximity).
+- Payment method inference: card type + last4 when present.
+
+Acceptance:
+- ≥ 95% total match; discrepancies flagged with reason (rounding, parsing failure).
+- Confidence per field; low-confidence flagged in UI for review.","type:feature, priority:P0, area:extraction",v0.1 MVP
+Line-item table detection and parsing,"Parse line items from tabular/near-tabular layouts:
+- Column inference (desc, qty, unit price, amount)
+- Multi-line descriptions
+- Totals reconciliation
+
+Acceptance:
+- On receipts with visible line items, capture ≥ 80% of rows correctly on benchmark.
+- If not present, degrade gracefully and mark `line_items_extracted=false`.","type:feature, priority:P0, area:extraction",v0.1 MVP
+Duplicate detection & collision handling,"Implement robust de-duplication:
+- Content hash (text), image hash (pHash), amount+date+merchant fuzzy key
+- UI to merge or skip duplicates
+
+Acceptance:
+- Prevents double import across watch folder + manual upload.","type:feature, priority:P0, area:pipeline",v0.1 MVP
+Validation rules & reconciliation checks,"Add validation layer:
+- subtotal + tax + tip ≈ total (tolerance configurable)
+- currency normalization; tax % plausible; date not in future
+- Emit `validation_status` + reasons
+
+Acceptance:
+- All receipts tagged pass/warn/fail with machine-readable reasons.","type:feature, priority:P0, area:quality",v0.1 MVP
+SQLite schema + migrations (Alembic),"Create normalized schema:
+- receipts, vendors, payments, line_items, files, categories, corrections
+- Alembic for migrations
+- Unique constraints for de-dup
+
+Acceptance:
+- `alembic upgrade head` bootstraps DB; CRUD via repository layer.","type:feature, priority:P0, area:data",v0.1 MVP
+Streamlit Review UI (low-confidence queue + quick fixes),"Build a Streamlit app for:
+- Inbox of low-confidence receipts
+- Field editors with keyboard shortcuts
+- Side-by-side image + extracted data
+- Accept/Reject/Needs Attention workflow
+
+Acceptance:
+- User can correct a receipt in ≤ 20 seconds.","type:feature, priority:P0, area:ui",v0.1 MVP
+Excel & PDF exports with Lindamood branding + hyperlinks,"Export reviewed results to:
+- Excel (.xlsx) with hyperlinks to source files and receipts in SharePoint
+- Branded PDF summary report with totals by vendor/category
+- Optional CSV for interoperability
+
+Acceptance:
+- File names + links portable on other PCs (relative or SharePoint URLs).","type:feature, priority:P0, area:export",v0.1 MVP
+CLI entrypoints + configuration management,"Provide CLI commands:
+- `receipt_app ingest`, `receipt_app process`, `receipt_app review`, `receipt_app export`
+Config via `configs/config.yaml` + env overrides.
+
+Acceptance:
+- `--help` works; sample config checked in with comments.","type:feature, priority:P0, area:devx",v0.1 MVP
+ML-based categorization with active learning,"Train a lightweight model to map receipts to budget categories (e.g., groceries, fuel).
+- Start with scikit-learn (linear SVM) using merchant + n-grams + totals
+- Add user feedback loop to improve over time
+- Save per-user/category rules overrides
+
+Acceptance:
+- ≥ 85% macro-F1 on held-out labeled set; UI shows top-3 with confidences.","type:feature, priority:P1, area:ml, milestone:Categorization",v0.2 Categorization
+Category rules engine & overrides,"Add YAML rules to force categories for specific merchants/keywords.
+- Precedence: explicit rule > ML prediction > default
+
+Acceptance:
+- Deterministic application order; audit log of assignments.","type:feature, priority:P1, area:ml, milestone:Categorization",v0.2 Categorization
+Monthly budgeting summary + trends dashboard,"Produce monthly rollups by category + vendor with sparklines in UI.
+- Export monthly Excel + PDF
+- Optional Power BI/SharePoint-friendly CSV
+
+Acceptance:
+- Dashboard renders ≤ 3s for 10k receipts.","type:feature, priority:P2, area:reporting",v0.2 Categorization
+"SharePoint integration for outputs (folders, links, metadata)","Write exports to SharePoint with stable URLs; set metadata columns (Vendor, Date, Total).
+Provide option to keep local copies with same structure.
+
+Acceptance:
+- Links in Excel open on other machines without prompts.","type:feature, priority:P1, area:integration",v0.3 Integrations
+Email/Gmail/Outlook importer for e-receipts,"Parse incoming receipt emails:
+- Watch specific mailbox/folder
+- Extract attachments + HTML bodies
+- Source tracking (email id) for de-dupe
+
+Acceptance:
+- Import ≥ 90% of common merchant e-receipts.","type:feature, priority:P2, area:ingestion, area:integration",v0.3 Integrations
+Optional AWS Textract AnalyzeExpense adapter,"Add adapter leveraging Textract AnalyzeExpense for receipts/invoices.
+- Map Textract kv/lineItem groups to internal schema
+- Config flag `ocr.engine: textract` + credentials
+
+Acceptance:
+- Parity tests vs DocTR baseline on benchmark.","type:feature, priority:P2, area:ocr, area:integration",v0.3 Integrations
+Benchmark dataset + evaluation harness,"Build a small, anonymized benchmark with gold labels.
+- Scripts: split/train/test; compute metrics per field/line item
+- Store results per commit for regressions
+
+Acceptance:
+- `make bench` outputs a markdown report with metrics + diffs.","type:feature, priority:P0, area:quality, area:ml",v0.1 MVP
+Confidence scoring and low-confidence routing,"Compute per-field confidences (OCR + extraction heuristics).
+Route low-confidence items to review queue; add thresholds in config.
+
+Acceptance:
+- False positive/negative rates documented; thresholds tunable.","type:feature, priority:P0, area:quality",v0.1 MVP
+"CI: tests, lint, type-check; pre-commit + GitHub Actions","Add pytest suite with fixtures; mypy; ruff; black; pre-commit hooks.
+GH Actions: run tests, lint, and build Docker on PR.
+
+Acceptance:
+- PRs blocked if checks fail; coverage report produced.","type:chore, priority:P0, area:ci-cd, area:testing",v0.1 MVP
+Docker image + devcontainer,"Provide reproducible environment with CUDA optional.
+- `docker compose up` runs the pipeline + UI
+- `.devcontainer` for Codespaces/VS Code
+
+Acceptance:
+- Setup on new machine in <10 minutes.","type:chore, priority:P1, area:infra",v0.1 MVP
+"Logging, tracing, and error reporting","Structured logging (JSON) with correlation IDs; error capture with stack traces.
+- Optional Sentry-like hook behind env var
+- User-facing error messages in UI
+
+Acceptance:
+- Logs include file id, run id, stage; searchable locally.","type:feature, priority:P1, area:ops",v0.1 MVP
+Performance: parallelism + batching,"Add ThreadPool/ProcessPool where appropriate; batch OCR calls.
+- Configurable concurrency; backpressure on watch folder
+
+Acceptance:
+- 2× throughput improvement on benchmark vs baseline.","type:perf, priority:P1, area:pipeline",v0.1 MVP
+Security & PII handling,"- Secrets via env/KeyVault; no secrets in repo
+- Optional at-rest encryption for images/DB
+- Redaction tools for sharing datasets (blur card numbers, barcodes)
+
+Acceptance:
+- Security checklist in README; secret scan passes.","type:feature, priority:P0, area:security",v0.1 MVP
+Documentation overhaul + architecture diagram,"Consolidate README + docs:
+- Quickstart
+- Config reference
+- Architecture diagram
+- Troubleshooting (DocTR install notes, Windows tips)
+
+Acceptance:
+- New user can run MVP in <30 minutes.","type:docs, priority:P0, area:docs",v0.1 MVP
+CLI import of existing folders (backfill),"Command to import historical archives without watch folder.
+- Dedup against DB
+- Progress bar + resumable
+
+Acceptance:
+- Can ingest 50k files without memory blowups.","type:feature, priority:P2, area:ingestion",v0.2 Categorization
+Data quality report per run,"Emit run summary:
+- Counts by status (ok/warn/fail)
+- Top failing rules
+- Low-confidence fields distribution
+
+Acceptance:
+- Markdown + CSV outputs saved with timestamped folder.","type:feature, priority:P1, area:quality, area:reporting",v0.1 MVP
+Handle split tenders and returns,"Support multiple payment methods per receipt and negative lines for returns/exchanges.
+
+Acceptance:
+- Validation accounts for split tenders and negative totals.","type:feature, priority:P2, area:extraction",v0.3 Integrations
+Multi-currency & locale support,"Auto-detect currency symbol/code and thousands/decimal separators.
+Configurable home currency + FX rates (static for MVP).
+
+Acceptance:
+- Correct totals on sample set with EUR/GBP receipts.","type:feature, priority:P2, area:extraction",v0.3 Integrations
+"Barcode/QR extraction (loyalty, order ids)","Detect and decode barcodes/QRs to enrich metadata (order id, store id).
+
+Acceptance:
+- Where present, IDs attached to receipt record with type + value.","type:feature, priority:P3, area:extraction",Backlog
+Anonymized synthetic data generator for testing,"Generate synthetic receipts with controllable noise/blur to expand training/eval.
+
+Acceptance:
+- 500 synthetic samples generated with labels for CI bench.","type:feature, priority:P3, area:testing, area:ml",Backlog
+API layer (FastAPI) for integrations,"Provide REST endpoints for upload, status, search, and export.
+- Auth via token in dev
+
+Acceptance:
+- Streamlit UI consumes the API instead of direct DB access.","type:feature, priority:P2, area:api",v0.3 Integrations
+Keyboard-first UX improvements in Streamlit,"Add hotkeys for Accept/Reject/Next, field navigation, and quick category assign.
+
+Acceptance:
+- Average correction time reduced by 25% in user test.","type:feature, priority:P2, area:ui",v0.2 Categorization
+Packaging & release pipeline,"Build versioned releases:
+- `pipx`-installable CLI
+- Changelog and semantic versioning
+- Release notes on GitHub
+
+Acceptance:
+- `pipx install receipt-app` works in a clean env.","type:chore, priority:P2, area:ci-cd",v0.3 Integrations
+Sampling-based manual QA workflow,"Allow random sampling of processed receipts for spot checks; export discrepancies.
+
+Acceptance:
+- 5% sample generation and review flow complete.","type:feature, priority:P3, area:quality",Backlog
+Configurable redaction for exports,"Option to redact card numbers, addresses, and barcodes in shared PDFs.
+
+Acceptance:
+- Redaction toggled in config; visual QA image produced.","type:feature, priority:P2, area:security, area:export",v0.2 Categorization
+Windows-friendly installer & paths,"Smooth setup on Windows 11:
+- Handle long paths; OneDrive quirks
+- Document Epson Smart Scan recommended settings
+
+Acceptance:
+- Fresh Windows laptop runs pipeline without manual package pinning.","type:docs, priority:P1, area:devx",v0.1 MVP
