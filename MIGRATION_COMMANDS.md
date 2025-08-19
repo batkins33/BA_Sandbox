@@ -81,8 +81,9 @@ cd u:\dev\projects\BA_Sandbox
 # rmdir /s WM_Invoice_Parser
 # rmdir /s manifest_extraction
 # rmdir /s tests
+# rmdir /s docs  # Now distributed to respective toolkits
 
-# Keep: docs/, README.md, and any other shared resources
+# Keep: README.md, shared_requirements.txt, and migration docs
 ```
 
 ## Verification
