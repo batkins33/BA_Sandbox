@@ -1,4 +1,5 @@
 pypdf
+PyPDF2
 pandas
 openpyxl
 pytesseract

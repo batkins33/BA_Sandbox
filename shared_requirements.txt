@@ -13,6 +13,7 @@ Pillow>=8.0.0
 # PDF processing
 PyMuPDF>=1.20.0
 pypdf>=3.0.0
+PyPDF2>=3.0.0
 
 # Web UI (receipt processing)
 streamlit>=1.0.0

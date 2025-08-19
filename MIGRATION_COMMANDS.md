@@ -93,13 +93,15 @@ Test each migrated project:
 ```bash
 # Receipt Processing
 cd u:\dev\projects\receipt_processing_toolkit
+pip install -r requirements.txt
 python -c "from receipt_processing import extract_fields; print('Receipt processing OK')"
 streamlit run streamlit_app.py --help
 
 # Manifest Extraction  
 cd u:\dev\projects\manifest_extraction_toolkit
+pip install -r src/requirements.txt
 python src/extract_manifest_fields.py --help
-python -c "from src.extract_manifest_fields import clean_manifest; print('Manifest extraction OK')"
+python -c "import sys; sys.path.insert(0, 'src'); from extract_manifest_fields import clean_manifest; print('Manifest extraction OK')"
 ```
 
 ## Benefits of This Structure
